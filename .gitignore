@@ -4,9 +4,11 @@ originale/
 editor.html
 layout.json
 
-# Nicht auf dem Board, daher nicht veröffentlichen.
-# Kommt ein Foto zurück aufs Board, die Zeile hier löschen.
+# Fotos, die auf keinem Board sind, bleiben privat.
+# Den Block darunter pflegt fotoboard.py beim Veröffentlichen selbst.
+# >>> fotoboard
 fotos/*/DSC04081.jpeg
+fotos/*/DSC04081_quadratisch.jpeg
 fotos/*/IMG_4585.jpeg
 fotos/*/IMG_4587.jpeg
 fotos/*/IMG_4605.jpeg
@@ -17,3 +19,4 @@ fotos/*/IMG_4647.jpeg
 fotos/*/IMG_4654.jpeg
 fotos/*/IMG_4659.jpeg
 fotos/*/IMG_4682.jpeg
+# <<< fotoboard

@@ -6,6 +6,15 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#000000">
 <title>Fotoboard</title>
+<meta name="description" content="40 Fotos">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Fotoboard">
+<meta property="og:description" content="40 Fotos">
+<meta property="og:url" content="https://ibfait.github.io/fotoboard/">
+<meta property="og:image" content="https://ibfait.github.io/fotoboard/vorschau.jpg?v=1271teu">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -60,6 +69,69 @@
     -webkit-user-drag: none;
   }
   .photo.missing img { visibility: hidden; }
+
+  #nav {
+    position: fixed;
+    left: max(12px, env(safe-area-inset-left));
+    top: max(12px, env(safe-area-inset-top));
+    z-index: 5;
+    font-size: 14px;
+  }
+  #nav[hidden], #nav-list[hidden] { display: none; }
+  #nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 24px);
+    padding: 8px 12px 8px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(28, 28, 28, 0.78);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: #eee;
+    font: inherit;
+    cursor: pointer;
+  }
+  #nav-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #nav-btn svg { flex: none; width: 16px; height: 16px; transition: transform 0.2s ease; }
+  #nav-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+  #nav-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  #nav-list {
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(70vh, 560px);
+    margin-top: 8px;
+    padding: 6px;
+    overflow-y: auto;
+    border-radius: 14px;
+    background: rgba(22, 22, 22, 0.92);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+  #nav-list a {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 6px;
+    border-radius: 10px;
+    color: #eee;
+    text-decoration: none;
+  }
+  #nav-list a:hover, #nav-list a:focus-visible { background: rgba(255, 255, 255, 0.08); outline: none; }
+  #nav-list a[aria-current="page"] { background: rgba(255, 255, 255, 0.13); }
+  #nav-list img {
+    display: block;
+    width: 96px;
+    aspect-ratio: 1200 / 630;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111;
+  }
+  #nav-list b { display: block; font-weight: 600; }
+  #nav-list small { color: #9a9a9a; font-size: 12px; }
 
   #lightbox {
     position: fixed;
@@ -120,6 +192,14 @@
 <body>
 <div id="stage"><div id="world"></div></div>
 
+<nav id="nav" aria-label="Boards" hidden>
+  <button id="nav-btn" type="button" aria-expanded="false" aria-controls="nav-list">
+    <span id="nav-title"></span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+  </button>
+  <div id="nav-list" hidden></div>
+</nav>
+
 <div id="lightbox" role="dialog" aria-modal="true" aria-label="Foto" hidden>
   <img id="lb-img" alt="">
   <button class="lb-btn" id="lb-prev" type="button" aria-label="Vorheriges Foto">
@@ -134,19 +214,24 @@
   <div id="lb-count" aria-live="polite"></div>
 </div>
 
+<script id="fotoboard-data" type="application/json">{"version":2,"title":"Fotoboard","description":"","slug":"","size":300,"items":[{"name":"IMG_4694.jpeg","x":-400,"y":1640,"rot":0,"z":1},{"name":"IMG_4631.jpeg","x":-400,"y":1320,"rot":0,"z":2},{"name":"IMG_4710.jpeg","x":-80,"y":1640,"rot":0,"z":3},{"name":"IMG_4778.jpeg","x":-80,"y":1320,"rot":0,"z":4},{"name":"IMG_4664.jpeg","x":-400,"y":2140,"rot":0,"z":5},{"name":"IMG_4618.jpeg","x":-80,"y":2140,"rot":0,"z":6},{"name":"IMG_4766.jpeg","x":-400,"y":2460,"rot":0,"z":7},{"name":"DSC04047.jpeg","x":-80,"y":2460,"rot":0,"z":8},{"name":"IMG_4718.jpeg","x":340,"y":2140,"rot":0,"z":9},{"name":"IMG_4723.jpeg","x":660,"y":2140,"rot":0,"z":10},{"name":"IMG_4596.jpeg","x":340,"y":2460,"rot":0,"z":11},{"name":"IMG_4651.jpeg","x":660,"y":2460,"rot":0,"z":12},{"name":"IMG_4729.jpeg","x":1100,"y":1300,"rot":0,"z":13},{"name":"IMG_4685.jpeg","x":1100,"y":1620,"rot":0,"z":14},{"name":"IMG_4734.jpeg","x":1420,"y":1300,"rot":0,"z":15},{"name":"IMG_4712.jpeg","x":1420,"y":1620,"rot":90,"z":16},{"name":"IMG_4601.jpeg","x":1100,"y":2140,"rot":0,"z":17},{"name":"IMG_4726.jpeg","x":1420,"y":2140,"rot":0,"z":18},{"name":"IMG_4589.jpeg","x":1100,"y":2460,"rot":0,"z":19},{"name":"IMG_4731.jpeg","x":1420,"y":2460,"rot":0,"z":20},{"name":"IMG_4689.jpeg","x":-400,"y":2860,"rot":0,"z":21},{"name":"IMG_4686.jpeg","x":-80,"y":2860,"rot":0,"z":22},{"name":"IMG_4629.jpeg","x":-400,"y":3180,"rot":0,"z":23},{"name":"IMG_4628.jpeg","x":-80,"y":3180,"rot":0,"z":24},{"name":"IMG_4934.jpeg","x":340,"y":2860,"rot":0,"z":25},{"name":"IMG_4693.jpeg","x":660,"y":2860,"rot":0,"z":26},{"name":"IMG_4676.jpeg","x":340,"y":3180,"rot":0,"z":27},{"name":"IMG_4646.jpeg","x":660,"y":3180,"rot":0,"z":28},{"name":"IMG_4594.jpeg","x":1100,"y":2860,"rot":0,"z":29},{"name":"IMG_4626.jpeg","x":1100,"y":3180,"rot":0,"z":30},{"name":"DSC03911.jpeg","x":1420,"y":3180,"rot":0,"z":31},{"name":"IMG_4663.jpeg","x":1420,"y":2860,"rot":0,"z":32},{"name":"DSC04065.jpeg","x":340,"y":1640,"rot":0,"z":33},{"name":"_DSC2247.jpeg","x":340,"y":1320,"rot":0,"z":34},{"name":"DSC03874.jpeg","x":660,"y":1640,"rot":0,"z":35},{"name":"_DSC2258.jpeg","x":660,"y":1320,"rot":0,"z":36},{"name":"DSC04084.jpeg","x":1900,"y":1740,"rot":0,"z":37},{"name":"DSC04027.jpeg","x":2220,"y":1740,"rot":0,"z":38},{"name":"DSC04040.jpeg","x":1900,"y":2060,"rot":0,"z":39},{"name":"DSC04038.jpeg","x":2220,"y":2060,"rot":0,"z":40}],"boards":[{"slug":"","title":"Fotoboard","count":40},{"slug":"test","title":"Test","count":2}]}</script>
 <script>
 (() => {
   'use strict';
-  const LAYOUT = {"size":300,"items":[{"name":"IMG_4694.jpeg","x":-400,"y":1640,"rot":0,"z":1},{"name":"IMG_4631.jpeg","x":-400,"y":1320,"rot":0,"z":2},{"name":"IMG_4710.jpeg","x":-80,"y":1640,"rot":0,"z":3},{"name":"IMG_4778.jpeg","x":-80,"y":1320,"rot":0,"z":4},{"name":"IMG_4664.jpeg","x":-400,"y":2140,"rot":0,"z":5},{"name":"IMG_4618.jpeg","x":-80,"y":2140,"rot":0,"z":6},{"name":"IMG_4766.jpeg","x":-400,"y":2460,"rot":0,"z":7},{"name":"DSC04047.jpeg","x":-80,"y":2460,"rot":0,"z":8},{"name":"IMG_4718.jpeg","x":340,"y":2140,"rot":0,"z":9},{"name":"IMG_4723.jpeg","x":660,"y":2140,"rot":0,"z":10},{"name":"IMG_4596.jpeg","x":340,"y":2460,"rot":0,"z":11},{"name":"IMG_4651.jpeg","x":660,"y":2460,"rot":0,"z":12},{"name":"IMG_4729.jpeg","x":1100,"y":1300,"rot":0,"z":13},{"name":"IMG_4685.jpeg","x":1100,"y":1620,"rot":0,"z":14},{"name":"IMG_4734.jpeg","x":1420,"y":1300,"rot":0,"z":15},{"name":"IMG_4712.jpeg","x":1420,"y":1620,"rot":90,"z":16},{"name":"IMG_4601.jpeg","x":1100,"y":2140,"rot":0,"z":17},{"name":"IMG_4726.jpeg","x":1420,"y":2140,"rot":0,"z":18},{"name":"IMG_4589.jpeg","x":1100,"y":2460,"rot":0,"z":19},{"name":"IMG_4731.jpeg","x":1420,"y":2460,"rot":0,"z":20},{"name":"IMG_4689.jpeg","x":-400,"y":2860,"rot":0,"z":21},{"name":"IMG_4686.jpeg","x":-80,"y":2860,"rot":0,"z":22},{"name":"IMG_4629.jpeg","x":-400,"y":3180,"rot":0,"z":23},{"name":"IMG_4628.jpeg","x":-80,"y":3180,"rot":0,"z":24},{"name":"IMG_4934.jpeg","x":340,"y":2860,"rot":0,"z":25},{"name":"IMG_4693.jpeg","x":660,"y":2860,"rot":0,"z":26},{"name":"IMG_4676.jpeg","x":340,"y":3180,"rot":0,"z":27},{"name":"IMG_4646.jpeg","x":660,"y":3180,"rot":0,"z":28},{"name":"IMG_4594.jpeg","x":1100,"y":2860,"rot":0,"z":29},{"name":"IMG_4626.jpeg","x":1100,"y":3180,"rot":0,"z":30},{"name":"DSC03911.jpeg","x":1420,"y":3180,"rot":0,"z":31},{"name":"IMG_4663.jpeg","x":1420,"y":2860,"rot":0,"z":32},{"name":"DSC04065.jpeg","x":340,"y":1640,"rot":0,"z":33},{"name":"_DSC2247.jpeg","x":340,"y":1320,"rot":0,"z":34},{"name":"DSC03874.jpeg","x":660,"y":1640,"rot":0,"z":35},{"name":"_DSC2258.jpeg","x":660,"y":1320,"rot":0,"z":36},{"name":"DSC04084.jpeg","x":1900,"y":1740,"rot":0,"z":37},{"name":"DSC04027.jpeg","x":2220,"y":1740,"rot":0,"z":38},{"name":"DSC04040.jpeg","x":1900,"y":2060,"rot":0,"z":39},{"name":"DSC04038.jpeg","x":2220,"y":2060,"rot":0,"z":40}]};
+  const DATA = JSON.parse(document.getElementById('fotoboard-data').textContent);
 
-  const S = LAYOUT.size || 300;
-  const items = LAYOUT.items.slice().sort((a, b) => a.z - b.z);
+  const S = DATA.size || 300;
+  const SLUG = DATA.slug || '';
+  const BASE = SLUG ? '../' : '';
+  const items = DATA.items.slice().sort((a, b) => a.z - b.z);
   const TAP = 8;            // ab so vielen Pixeln gilt ein Druck als Ziehen
   const MAX_SCALE = 4;
+  // Versionen der Fotos: beim Hineinzoomen wird die nächstgrössere geladen
+  const LEVELS = [['board', 500], ['mittel', 1000], ['gross', 2000]];
 
   const stage = document.getElementById('stage');
   const world = document.getElementById('world');
-  const src = (dir, name) => 'fotos/' + dir + '/' + encodeURIComponent(name);
+  const src = (dir, name) => BASE + 'fotos/' + dir + '/' + encodeURIComponent(name);
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
   world.style.setProperty('--size', S + 'px');
@@ -168,18 +253,19 @@
     return tile;
   });
 
-  // Umriss aller Fotos, gedrehte Fotos mitgerechnet
-  const box = (() => {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const it of items) {
-      const r = (it.rot || 0) * Math.PI / 180;
-      const h = S / 2 * (Math.abs(Math.cos(r)) + Math.abs(Math.sin(r)));
-      const cx = it.x + S / 2, cy = it.y + S / 2;
-      minX = Math.min(minX, cx - h); maxX = Math.max(maxX, cx + h);
-      minY = Math.min(minY, cy - h); maxY = Math.max(maxY, cy + h);
-    }
-    return items.length ? { minX, minY, maxX, maxY } : { minX: 0, minY: 0, maxX: S, maxY: S };
-  })();
+  // Umriss jedes Fotos und des ganzen Boards, gedrehte Fotos mitgerechnet
+  const boxes = items.map((it) => {
+    const r = (it.rot || 0) * Math.PI / 180;
+    const h = S / 2 * (Math.abs(Math.cos(r)) + Math.abs(Math.sin(r)));
+    const cx = it.x + S / 2, cy = it.y + S / 2;
+    return { l: cx - h, t: cy - h, r: cx + h, b: cy + h };
+  });
+  const box = boxes.length ? {
+    minX: Math.min(...boxes.map((b) => b.l)),
+    minY: Math.min(...boxes.map((b) => b.t)),
+    maxX: Math.max(...boxes.map((b) => b.r)),
+    maxY: Math.max(...boxes.map((b) => b.b)),
+  } : { minX: 0, minY: 0, maxX: S, maxY: S };
 
   // ---------- Ansicht: verschieben und zoomen ----------
   const view = { x: 0, y: 0, s: 1 };
@@ -188,6 +274,7 @@
 
   function apply() {
     world.style.transform = 'translate(' + view.x + 'px, ' + view.y + 'px) scale(' + view.s + ')';
+    scheduleSharp();
   }
 
   // Die Bildschirmmitte bleibt immer über dem Board, so geht es nie verloren.
@@ -219,6 +306,55 @@
     apply();
   }
 
+  // ---------- Scharf beim Hineinzoomen ----------
+  const sharp = items.map(() => ({ level: 0, want: 0, broken: {} }));
+  let sharpTimer = 0;
+
+  function scheduleSharp() {
+    clearTimeout(sharpTimer);
+    sharpTimer = setTimeout(updateSharp, 160);
+  }
+
+  function updateSharp() {
+    const px = S * view.s * (window.devicePixelRatio || 1);
+    const need = px > LEVELS[1][1] * 1.15 ? 2 : px > LEVELS[0][1] * 1.15 ? 1 : 0;
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const wx = (sx) => (sx - view.x) / view.s, wy = (sy) => (sy - view.y) / view.s;
+    // nah: wird scharf geladen; weit weg: zurück auf die kleine Version
+    const near = { l: wx(-w * 0.25), r: wx(w * 1.25), t: wy(-h * 0.25), b: wy(h * 1.25) };
+    const far = { l: wx(-w), r: wx(2 * w), t: wy(-h), b: wy(2 * h) };
+    const hits = (b, a) => b.r > a.l && b.l < a.r && b.b > a.t && b.t < a.b;
+    boxes.forEach((b, i) => {
+      if (tiles[i].classList.contains('missing')) return;
+      let level = sharp[i].want;
+      if (hits(b, near)) level = need;
+      else if (!hits(b, far)) level = 0;
+      else level = Math.min(level, need);
+      setLevel(i, level);
+    });
+  }
+
+  function setLevel(i, level) {
+    const st = sharp[i];
+    while (level > 0 && st.broken[level]) level--;   // fehlt eine Version, die kleinere nehmen
+    if (level === st.want) return;
+    st.want = level;
+    const img = tiles[i].firstChild;
+    const url = src(LEVELS[level][0], items[i].name);
+    if (level === 0) { img.src = url; st.level = 0; return; }
+    const pre = new Image();
+    pre.decoding = 'async';
+    pre.src = url;
+    const loaded = pre.decode ? pre.decode() : new Promise((ok, fail) => { pre.onload = ok; pre.onerror = fail; });
+    loaded.then(() => {
+      if (st.want === level) { img.src = url; st.level = level; }
+    }, () => {
+      st.broken[level] = true;
+      if (st.want === level) { st.want = -1; setLevel(i, level - 1); }
+    });
+  }
+
+  // ---------- Ziehen, Pinch, Mausrad ----------
   const pts = new Map();
   let g = null;
 
@@ -323,6 +459,54 @@
     if (touched) { keepInside(); apply(); } else fit();
   });
 
+  // ---------- Andere Boards ----------
+  const nav = document.getElementById('nav');
+  const navBtn = document.getElementById('nav-btn');
+  const navList = document.getElementById('nav-list');
+  const boards = Array.isArray(DATA.boards) ? DATA.boards : [];
+
+  function link(slug, file) {
+    const dir = BASE + (slug ? encodeURIComponent(slug) + '/' : '');
+    return (dir || './') + (file || '');
+  }
+
+  function toggleNav(open) {
+    open = open ?? navList.hidden;
+    navList.hidden = !open;
+    navBtn.setAttribute('aria-expanded', String(open));
+  }
+
+  if (boards.length > 1) {
+    nav.hidden = false;
+    document.getElementById('nav-title').textContent = DATA.title || 'Fotoboard';
+    for (const b of boards) {
+      const a = document.createElement('a');
+      a.href = link(b.slug);
+      if ((b.slug || '') === SLUG) a.setAttribute('aria-current', 'page');
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.addEventListener('error', () => { img.style.visibility = 'hidden'; }, { once: true });
+      img.src = link(b.slug, 'vorschau.jpg');
+      const text = document.createElement('span');
+      const title = document.createElement('b');
+      title.textContent = b.title || 'Fotoboard';
+      const count = document.createElement('small');
+      count.textContent = b.count === 1 ? '1 Foto' : (b.count || 0) + ' Fotos';
+      text.append(title, count);
+      a.append(img, text);
+      navList.append(a);
+    }
+    navBtn.addEventListener('click', () => toggleNav());
+    document.addEventListener('pointerdown', (e) => {
+      if (!navList.hidden && !nav.contains(e.target)) toggleNav(false);
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !navList.hidden) { toggleNav(false); navBtn.focus(); }
+    });
+  }
+
   // ---------- Lightbox ----------
   const lb = document.getElementById('lightbox');
   const lbImg = document.getElementById('lb-img');
@@ -353,7 +537,7 @@
     const thumb = tiles[i].firstChild;
     const ar = thumb.naturalWidth && thumb.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 1;
     lb.style.setProperty('--ar', ar);
-    lbImg.src = src('board', name);           // sofort sichtbar, liegt schon im Cache
+    lbImg.src = thumb.getAttribute('src') || src('board', name);   // sofort sichtbar, liegt schon im Cache
     lbImg.alt = 'Foto ' + (cur + 1) + ' von ' + order.length;
     lbCount.textContent = (cur + 1) + ' / ' + order.length;
     const t = ++token;
@@ -369,6 +553,7 @@
   function openLightbox(i) {
     cur = order.indexOf(i);
     if (cur < 0) return;
+    toggleNav(false);
     lastFocus = document.activeElement;
     lb.hidden = false;
     show();

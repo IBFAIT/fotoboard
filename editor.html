@@ -860,8 +860,9 @@
   // ---------- Grossansicht (PhotoSwipe) ----------
   // Zeigt sofort das Foto vom Board und lädt im Hintergrund schärfere Versionen.
   // Beim Hineinzoomen wählt der Browser über srcset die nächstgrössere.
-  const BIG = [['mittel', 1000], ['gross', 2000], ['voll', 4000]];
-  const NOMINAL = 4000;     // so gross gilt ein Foto für PhotoSwipe (Zoomstufe 1)
+  const BIG = [['mittel', 1000], ['gross', 2000]];   // dazu «voll» in Originalgrösse
+  const NOMINAL = 4000;     // angenommene Grösse, falls ein Board keine Masse kennt
+  const SIZES = DATA.sizes || {};
 
   // Reihenfolge zum Blättern: zeilenweise von links oben nach rechts unten
   const order = (() => {
@@ -902,12 +903,23 @@
   function slide(i) {
     const name = items[i].name;
     const thumb = tiles[i].firstChild;
-    const ar = thumb.naturalWidth && thumb.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 1;
-    const w = ar >= 1 ? NOMINAL : Math.round(NOMINAL * ar);
-    const h = ar >= 1 ? Math.round(NOMINAL / ar) : NOMINAL;
+    const known = Array.isArray(SIZES[name]) && SIZES[name][0] > 0 && SIZES[name][1] > 0;
+    let w, h;
+    if (known) {
+      [w, h] = SIZES[name];
+    } else {
+      const ar = thumb.naturalWidth && thumb.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 1;
+      w = ar >= 1 ? NOMINAL : Math.round(NOMINAL * ar);
+      h = ar >= 1 ? Math.round(NOMINAL / ar) : NOMINAL;
+    }
+    // Nur Stufen, die kleiner als das Original sind, dazu das Original selbst
+    const long = Math.max(w, h);
+    const set = BIG.filter(([, px]) => px < long)
+      .map(([dir, px]) => src(dir, name) + ' ' + Math.round(w * px / long) + 'w');
+    set.push(src('voll', name) + ' ' + w + 'w');
     return {
-      src: src('gross', name),
-      srcset: BIG.map(([dir, px]) => src(dir, name) + ' ' + Math.round(px * w / NOMINAL) + 'w').join(', '),
+      src: src(long > 2000 ? 'gross' : 'voll', name),
+      srcset: set.join(', '),
       msrc: thumb.currentSrc || thumb.getAttribute('src') || src('board', name),
       width: w,
       height: h,
@@ -934,7 +946,8 @@
       bgOpacity: 0.94,
       showHideAnimationType: 'fade',
       wheelToZoom: true,
-      maxZoomLevel: (zl) => Math.max(1, zl.fit * 6),
+      // bis doppelte Originalgrösse, mindestens sechsmal grösser als am Anfang
+      maxZoomLevel: (zl) => Math.max(2, zl.fit * 6),
       closeTitle: 'Schliessen',
       zoomTitle: 'Zoomen',
       arrowPrevTitle: 'Vorheriges Foto',
@@ -1031,6 +1044,10 @@
   let site = '';                  // öffentliche Adresse, z. B. https://name.github.io/fotoboard/
   const images = new Map();       // Dateiname -> Bild-URL
   const serverPhotos = new Map(); // Dateiname -> Version (nur mit fotoboard.py)
+  const photoSizes = new Map();   // Dateiname -> [Breite, Höhe] der grössten Version
+  const rememberSize = (p) => {
+    if (Number.isInteger(p.w) && Number.isInteger(p.h) && p.w > 0 && p.h > 0) photoSizes.set(p.name, [p.w, p.h]);
+  };
   const els = new Map();          // Dateiname -> Element
   const selection = new Set();    // ausgewählte Dateinamen
   const undoStack = [];
@@ -1719,6 +1736,7 @@
     let data = null;
     try { data = await res.json(); } catch (_) {}
     if (!res.ok || !data || !data.ok) throw new Error((data && data.error) || `Fehler ${res.status}`);
+    rememberSize({ name: file.name, w: data.w, h: data.h });
     return data.v;
   }
 
@@ -1859,15 +1877,21 @@
   }
 
   function boardData(b) {
-    return {
+    const items = sortedItems(b);
+    const data = {
       version: 2,
       title: b.title,
       description: b.description || '',
       slug: b.slug,
       size: b.size,
-      items: sortedItems(b),
+      items,
       boards: boards.map((x) => ({ slug: x.slug, title: x.title, count: x.items.length })),
     };
+    // Grösse der Originale, damit die Grossansicht bis ins Detail zoomen kann
+    const sizes = {};
+    for (const it of items) if (photoSizes.has(it.name)) sizes[it.name] = photoSizes.get(it.name);
+    if (Object.keys(sizes).length) data.sizes = sizes;
+    return data;
   }
 
   function hash(str) {
@@ -2486,6 +2510,7 @@
       try { localStorage.setItem(LS_SITE, site); } catch (_) {}
       for (const p of info.photos || []) {
         serverPhotos.set(p.name, p.v);
+        rememberSize(p);
         images.set(p.name, photoUrl(p.name, p.v));
       }
       boards = mergeBoards(local, info.boards || []);

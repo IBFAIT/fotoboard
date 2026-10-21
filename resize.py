@@ -6,7 +6,7 @@ Schreibt vier Versionen, jeweils mit der längsten Seite in Pixeln:
   fotos/board/   500 px   fürs Board
   fotos/mittel/ 1000 px   wenn man ins Board hineinzoomt
   fotos/gross/  2000 px   für die Grossansicht
-  fotos/voll/   4000 px   wenn man in der Grossansicht stark hineinzoomt
+  fotos/voll/   Original  wenn man in der Grossansicht stark hineinzoomt
 
 JPEG mit Qualität 85. Die EXIF-Drehung wird ins Bild übernommen, kleinere Bilder
 werden nie vergrössert. Dateinamen bleiben unverändert, damit Editor und Viewer
@@ -22,7 +22,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-SIZES = {"board": 500, "mittel": 1000, "gross": 2000, "voll": 4000}
+SIZES = {"board": 500, "mittel": 1000, "gross": 2000, "voll": None}   # None: volle Grösse
 QUALITY = 85
 EXTENSIONS = {".jpg", ".jpeg"}
 
@@ -30,7 +30,8 @@ EXTENSIONS = {".jpg", ".jpeg"}
 def save_version(img, icc, target, max_side):
     version = img.copy()
     # thumbnail() verkleinert nur und behält das Seitenverhältnis bei.
-    version.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+    if max_side:
+        version.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
     options = {"quality": QUALITY, "optimize": True, "progressive": True}
     if icc:
         options["icc_profile"] = icc

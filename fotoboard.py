@@ -135,6 +135,17 @@ def photo_names():
     )
 
 
+def full_size(name):
+    """Breite und Höhe der grössten Version, oder None."""
+    from PIL import Image
+
+    try:
+        with Image.open(FOTOS / "voll" / name) as im:
+            return list(im.size)
+    except Exception:
+        return None
+
+
 def photo_list():
     out = []
     for name in photo_names():
@@ -142,7 +153,11 @@ def photo_list():
             v = int((FOTOS / "board" / name).stat().st_mtime)
         except OSError:
             continue
-        out.append({"name": name, "v": v})
+        entry = {"name": name, "v": v}
+        size = full_size(name)
+        if size:
+            entry["w"], entry["h"] = size
+        out.append(entry)
     return out
 
 
@@ -667,7 +682,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if not 0 < length <= MAX_UPLOAD:
                     raise Problem(f"{name}: Datei fehlt oder ist zu gross.")
                 body = self.rfile.read(length)
-                return self._send({"ok": True, "name": name, "v": save_upload(name, body)})
+                v = save_upload(name, body)
+                size = full_size(name) or [None, None]
+                return self._send({"ok": True, "name": name, "v": v, "w": size[0], "h": size[1]})
             if url.path == "/api/publish":
                 lines = []
                 try:

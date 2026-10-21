@@ -148,7 +148,7 @@
   <div id="nav-list" hidden></div>
 </nav>
 
-<script id="fotoboard-data" type="application/json">{"version":2,"title":"Test","description":"","slug":"test","size":300,"items":[{"name":"_DSC2247.jpeg","x":1040,"y":-480,"rot":0,"z":1},{"name":"_DSC2258.jpeg","x":1360,"y":-480,"rot":0,"z":2}],"boards":[{"slug":"","title":"Fotoboard","count":40},{"slug":"test","title":"Test","count":2}]}</script>
+<script id="fotoboard-data" type="application/json">{"version":2,"title":"Test","description":"","slug":"test","size":300,"items":[{"name":"_DSC2247.jpeg","x":1040,"y":-480,"rot":0,"z":1},{"name":"_DSC2258.jpeg","x":1360,"y":-480,"rot":0,"z":2}],"boards":[{"slug":"","title":"Fotoboard","count":40},{"slug":"test","title":"Test","count":2}],"sizes":{"_DSC2247.jpeg":[2701,2701],"_DSC2258.jpeg":[3187,3187]}}</script>
 <script>
 (() => {
   'use strict';
@@ -444,8 +444,9 @@
   // ---------- Grossansicht (PhotoSwipe) ----------
   // Zeigt sofort das Foto vom Board und lädt im Hintergrund schärfere Versionen.
   // Beim Hineinzoomen wählt der Browser über srcset die nächstgrössere.
-  const BIG = [['mittel', 1000], ['gross', 2000], ['voll', 4000]];
-  const NOMINAL = 4000;     // so gross gilt ein Foto für PhotoSwipe (Zoomstufe 1)
+  const BIG = [['mittel', 1000], ['gross', 2000]];   // dazu «voll» in Originalgrösse
+  const NOMINAL = 4000;     // angenommene Grösse, falls ein Board keine Masse kennt
+  const SIZES = DATA.sizes || {};
 
   // Reihenfolge zum Blättern: zeilenweise von links oben nach rechts unten
   const order = (() => {
@@ -486,12 +487,23 @@
   function slide(i) {
     const name = items[i].name;
     const thumb = tiles[i].firstChild;
-    const ar = thumb.naturalWidth && thumb.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 1;
-    const w = ar >= 1 ? NOMINAL : Math.round(NOMINAL * ar);
-    const h = ar >= 1 ? Math.round(NOMINAL / ar) : NOMINAL;
+    const known = Array.isArray(SIZES[name]) && SIZES[name][0] > 0 && SIZES[name][1] > 0;
+    let w, h;
+    if (known) {
+      [w, h] = SIZES[name];
+    } else {
+      const ar = thumb.naturalWidth && thumb.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 1;
+      w = ar >= 1 ? NOMINAL : Math.round(NOMINAL * ar);
+      h = ar >= 1 ? Math.round(NOMINAL / ar) : NOMINAL;
+    }
+    // Nur Stufen, die kleiner als das Original sind, dazu das Original selbst
+    const long = Math.max(w, h);
+    const set = BIG.filter(([, px]) => px < long)
+      .map(([dir, px]) => src(dir, name) + ' ' + Math.round(w * px / long) + 'w');
+    set.push(src('voll', name) + ' ' + w + 'w');
     return {
-      src: src('gross', name),
-      srcset: BIG.map(([dir, px]) => src(dir, name) + ' ' + Math.round(px * w / NOMINAL) + 'w').join(', '),
+      src: src(long > 2000 ? 'gross' : 'voll', name),
+      srcset: set.join(', '),
       msrc: thumb.currentSrc || thumb.getAttribute('src') || src('board', name),
       width: w,
       height: h,
@@ -518,7 +530,8 @@
       bgOpacity: 0.94,
       showHideAnimationType: 'fade',
       wheelToZoom: true,
-      maxZoomLevel: (zl) => Math.max(1, zl.fit * 6),
+      // bis doppelte Originalgrösse, mindestens sechsmal grösser als am Anfang
+      maxZoomLevel: (zl) => Math.max(2, zl.fit * 6),
       closeTitle: 'Schliessen',
       zoomTitle: 'Zoomen',
       arrowPrevTitle: 'Vorheriges Foto',

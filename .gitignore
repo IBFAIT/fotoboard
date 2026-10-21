@@ -1,7 +1,6 @@
 .venv/
 .DS_Store
 originale/
-editor.html
 layout.json
 
 # Fotos, die auf keinem Board sind, bleiben privat.

@@ -37,11 +37,14 @@ FOTOS = ROOT / "fotos"
 PORT = 8765
 PREVIEW = "vorschau.jpg"
 PREVIEW_SIZE = (1200, 630)
-RESERVED = {"fotos", "originale", "api"}
+RESERVED = {"fotos", "originale", "api", "lib"}
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$")
 DATA_RE = re.compile(r'<script id="fotoboard-data" type="application/json">(.*?)</script>', re.S)
 OLD_DATA_RE = re.compile(r"const LAYOUT = (\{.*?\});\s*$", re.S | re.M)
-TOOLS = ["resize.py", "fotoboard.py", "Fotoboard.command", "Veröffentlichen.command", ".nojekyll"]
+TOOLS = [
+    "editor.html", "resize.py", "fotoboard.py", "Fotoboard.command", "Veröffentlichen.command", ".nojekyll",
+    "lib/photoswipe/photoswipe.umd.min.js", "lib/photoswipe/photoswipe.css", "lib/photoswipe/LICENSE.txt",
+]
 IGNORE_START = "# >>> fotoboard"
 IGNORE_END = "# <<< fotoboard"
 IGNORE_INTRO = [
@@ -432,11 +435,18 @@ def plan():
     )
     tracked_photos = {p.split("/")[-1] for p in tracked if p.startswith("fotos/")}
     new_photos = sorted(n for n in used if f"fotos/board/{n}" not in tracked)
+    # Fotos, die schon online sind, aber eine neue Grösse bekommen haben
+    new_versions = sorted(
+        n for n in used if n not in new_photos and any(
+            f"fotos/{v}/{n}" not in tracked and (FOTOS / v / n).is_file() for v in resize.SIZES
+        )
+    )
     removed_photos = sorted(n for n in tracked_photos if n not in used)
     tools = [t for t in TOOLS if (ROOT / t).exists() and changed(t, tracked)]
     ahead = unpushed_commits() if has_upstream() else 0
     nothing = (
-        not new_photos and not removed_photos and not removed_boards and not tools and not ahead
+        not new_photos and not new_versions and not removed_photos and not removed_boards
+        and not tools and not ahead
         and all(b["status"] == "unverändert" for b in board_info)
     )
     return {
@@ -444,6 +454,7 @@ def plan():
         "boards": board_info,
         "removed_boards": removed_boards,
         "new_photos": new_photos,
+        "new_versions": new_versions,
         "removed_photos": removed_photos,
         "missing": missing,
         "tools": tools,
@@ -487,6 +498,8 @@ def commit_message(boards, info):
 
     if info["new_photos"]:
         lines.append(f"- {fotos(len(info['new_photos']))} dazu")
+    if info["new_versions"]:
+        lines.append(f"- grössere Versionen für {fotos(len(info['new_versions']))}")
     if info["removed_photos"]:
         lines.append(f"- {fotos(len(info['removed_photos']))} nicht mehr online")
     if info["tools"]:
@@ -574,6 +587,8 @@ def print_plan(info):
         print(f"  {slug}/ wird entfernt")
     if info["new_photos"]:
         print(f"Neue Fotos: {len(info['new_photos'])}")
+    if info["new_versions"]:
+        print(f"Grössere Versionen für {len(info['new_versions'])} Fotos")
     if info["removed_photos"]:
         print(f"Fotos, die nicht mehr online sind: {len(info['removed_photos'])}")
     if info["missing"]:

@@ -2,10 +2,11 @@
 
 Aufruf:  .venv/bin/python resize.py originale
 
-Schreibt drei Versionen, jeweils mit der längsten Seite in Pixeln:
+Schreibt vier Versionen, jeweils mit der längsten Seite in Pixeln:
   fotos/board/   500 px   fürs Board
   fotos/mittel/ 1000 px   wenn man ins Board hineinzoomt
   fotos/gross/  2000 px   für die Grossansicht
+  fotos/voll/   4000 px   wenn man in der Grossansicht stark hineinzoomt
 
 JPEG mit Qualität 85. Die EXIF-Drehung wird ins Bild übernommen, kleinere Bilder
 werden nie vergrössert. Dateinamen bleiben unverändert, damit Editor und Viewer
@@ -21,7 +22,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-SIZES = {"board": 500, "mittel": 1000, "gross": 2000}
+SIZES = {"board": 500, "mittel": 1000, "gross": 2000, "voll": 4000}
 QUALITY = 85
 EXTENSIONS = {".jpg", ".jpeg"}
 

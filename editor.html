@@ -1,0 +1,2532 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Fotoboard Editor</title>
+<style>
+  :root {
+    --accent: #4c9dff;
+    --guide: #ff3d7f;
+    --panel: rgba(20, 20, 20, 0.92);
+    --line: #2e2e2e;
+    --text: #e9e9e9;
+    --muted: #8c8c8c;
+    --danger: #ff8a80;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body { -webkit-user-select: none; user-select: none; }
+  input { -webkit-user-select: text; user-select: text; }
+  body.mode-file .server-only, body.mode-server .file-only { display: none !important; }
+
+  /* Arbeitsfläche */
+  #stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+  }
+  #stage.panning, #stage.panning .photo { cursor: grabbing; }
+  #stage.grid {
+    background-image: radial-gradient(circle, #2c2c2c 0 1px, transparent 1.5px);
+    background-size: var(--g, 20px) var(--g, 20px);
+    background-position: var(--gx, 0) var(--gy, 0);
+  }
+  #world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+    --inv: 1;
+  }
+  .photo {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--size, 300px);
+    height: var(--size, 300px);
+    cursor: move;
+    background: #111;
+  }
+  .photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  .photo .label { display: none; }
+  .photo.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0b0b0b;
+    border: calc(2px * var(--inv)) dashed #5c5c5c;
+  }
+  .photo.placeholder img { display: none; }
+  .photo.placeholder .label {
+    display: block;
+    padding: 16px;
+    color: #a0a0a0;
+    font-size: 20px;
+    text-align: center;
+    word-break: break-all;
+  }
+  .photo.selected {
+    outline: calc(3px * var(--inv)) solid var(--accent);
+    outline-offset: calc(4px * var(--inv));
+  }
+  .photo.snap { transition: transform 0.12s ease-out; }
+
+  /* Hilfslinien beim Ausrichten */
+  #guides {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 2147483000;
+    pointer-events: none;
+  }
+  .guide { position: absolute; background: var(--guide); }
+  .guide.v { width: calc(1px * var(--inv)); }
+  .guide.h { height: calc(1px * var(--inv)); }
+  .gap-label {
+    position: absolute;
+    padding: 0 calc(4px * var(--inv));
+    border-radius: calc(3px * var(--inv));
+    background: var(--guide);
+    color: #fff;
+    font-size: calc(11px * var(--inv));
+    line-height: 1.5;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Auswahlrahmen */
+  #marquee {
+    position: absolute;
+    z-index: 5;
+    border: 1px solid var(--accent);
+    background: rgba(76, 157, 255, 0.12);
+    pointer-events: none;
+  }
+  #marquee[hidden] { display: none; }
+
+  /* Bedienelemente */
+  #toolbar {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 24px);
+    padding: 6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  #toolbar .sep { width: 1px; height: 20px; margin: 0 2px; background: var(--line); }
+  button {
+    font: inherit;
+    color: var(--text);
+    background: #1f1f1f;
+    border: 1px solid #353535;
+    border-radius: 7px;
+    padding: 6px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover { background: #2a2a2a; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary { background: #17324f; border-color: #2c5d91; }
+  button.primary:hover { background: #1d3f63; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: #fff; }
+  button[aria-pressed="false"] { color: var(--muted); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #btn-board {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 260px;
+    font-weight: 600;
+  }
+  #btn-board .name { overflow: hidden; text-overflow: ellipsis; }
+  #btn-board svg { flex: none; width: 12px; height: 12px; color: var(--muted); }
+
+  .menu {
+    position: fixed;
+    z-index: 15;
+    min-width: 250px;
+    max-width: min(360px, calc(100vw - 24px));
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    padding: 6px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  }
+  .menu[hidden] { display: none; }
+  .menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    text-align: left;
+  }
+  .menu button:hover, .menu button:focus-visible { background: #2a2a2a; outline: none; }
+  .menu button:disabled:hover { background: transparent; }
+  .menu .check { flex: none; width: 14px; color: var(--accent); }
+  .menu .title { overflow: hidden; text-overflow: ellipsis; }
+  .menu .meta { margin-left: auto; padding-left: 12px; color: var(--muted); }
+  .menu .danger { color: var(--danger); }
+  .menu hr { margin: 6px 4px; border: 0; border-top: 1px solid #2e2e2e; }
+
+  .panel {
+    position: fixed;
+    z-index: 10;
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  #status { left: 12px; bottom: 12px; font-variant-numeric: tabular-nums; }
+  #status b { color: var(--text); font-weight: 500; }
+  #status .ok { color: #7fd68a; }
+  #status .warn { color: var(--danger); }
+  #help { right: 12px; bottom: 12px; text-align: right; }
+  #help kbd {
+    font: inherit;
+    color: var(--text);
+    padding: 0 4px;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+  }
+  @media (max-width: 1000px) { #help { display: none; } }
+
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 56px;
+    z-index: 20;
+    max-width: min(560px, calc(100vw - 32px));
+    padding: 8px 14px;
+    background: #222;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: var(--text);
+    text-align: center;
+    transform: translate(-50%, 8px);
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  #empty {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    color: var(--muted);
+    font-size: 15px;
+    text-align: center;
+    pointer-events: none;
+  }
+  #empty[hidden] { display: none; }
+  #empty strong { color: var(--text); font-weight: 600; }
+  #empty code { color: var(--text); }
+
+  #drop {
+    position: fixed;
+    inset: 12px;
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--accent);
+    border-radius: 14px;
+    background: rgba(76, 157, 255, 0.08);
+    color: var(--text);
+    font-size: 18px;
+    pointer-events: none;
+  }
+  #drop[hidden] { display: none; }
+
+  /* Dialoge */
+  dialog {
+    width: min(480px, calc(100vw - 32px));
+    padding: 20px 22px;
+    color: var(--text);
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+  dialog h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+  dialog p { margin: 0 0 10px; }
+  dialog label { display: block; margin: 14px 0 5px; color: var(--muted); }
+  dialog label .opt { font-size: 12px; }
+  dialog input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    font: inherit;
+    color: var(--text);
+    background: #0f0f0f;
+    border: 1px solid #3a3a3a;
+    border-radius: 7px;
+  }
+  dialog input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  dialog input:disabled { color: var(--muted); }
+  dialog label.check { display: flex; align-items: center; gap: 8px; color: var(--text); }
+  dialog .hint { margin-top: 5px; color: var(--muted); font-size: 12px; word-break: break-all; }
+  dialog .error { min-height: 1.4em; margin-top: 10px; color: var(--danger); }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  dialog a { color: var(--accent); }
+  #pub-body ul { margin: 0 0 12px; padding: 0; list-style: none; }
+  #pub-body li { padding: 8px 0; border-bottom: 1px solid #2a2a2a; }
+  #pub-body li:last-child { border-bottom: 0; }
+  #pub-body .tag { padding: 1px 6px; border-radius: 4px; background: #2a2a2a; color: var(--muted); font-size: 12px; }
+  #pub-body .tag.neu, #pub-body .tag.geändert { background: #17324f; color: #cfe3ff; }
+  #pub-body .url { color: var(--muted); font-size: 12px; word-break: break-all; }
+  #pub-body pre {
+    max-height: 200px;
+    overflow: auto;
+    padding: 8px;
+    background: #0f0f0f;
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    white-space: pre-wrap;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
+    vertical-align: -2px;
+    border: 2px solid #444;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="stage" class="grid"><div id="world"></div><div id="marquee" hidden></div></div>
+
+<div id="empty" hidden>
+  <p class="server-only"><strong>Noch keine Fotos auf diesem Board.</strong><br>
+  Klicke auf «Fotos hinzufügen» oder ziehe Fotos aus dem Finder hierher.</p>
+  <p class="file-only"><strong>Noch keine Fotos auf dem Board.</strong><br>
+  Klicke auf «Fotos laden» und wähle alle Bilder aus <code>fotos/board/</code>.</p>
+</div>
+
+<div id="toolbar" role="toolbar" aria-label="Fotoboard">
+  <button id="btn-board" aria-haspopup="menu" aria-expanded="false" title="Boards wechseln, anlegen und benennen">
+    <span class="name" id="board-name">Fotoboard</span>
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>
+  </button>
+  <span class="sep" aria-hidden="true"></span>
+  <button id="btn-photos" class="primary"><span class="server-only">Fotos hinzufügen …</span><span class="file-only">Fotos laden …</span></button>
+  <button id="btn-fit">Alles zeigen</button>
+  <button id="btn-grid" aria-pressed="true" title="Raster ein/aus (Taste G)">Raster</button>
+  <button id="btn-snap" title="Alle Fotos aufs Raster setzen (⌘+Z macht es rückgängig)">Alle einrasten</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button id="btn-view" class="server-only" title="Board so ansehen, wie Besucher es sehen">Ansehen</button>
+  <button id="btn-publish" class="server-only primary" title="Alle Boards auf GitHub stellen">Veröffentlichen</button>
+  <button id="btn-export" class="file-only primary">index.html erzeugen</button>
+</div>
+
+<div id="board-menu" class="menu" role="menu" hidden></div>
+
+<div id="status" class="panel" aria-live="polite"></div>
+<div id="help" class="panel">
+  Foto ziehen · Fläche ziehen schiebt · Mausrad/Pinch zoomt<br>
+  <kbd>⇧</kbd>+Klick oder <kbd>⇧</kbd>+Rahmen ziehen: mehrere Fotos · <kbd>⌥</kbd> beim Ziehen: frei, ohne Einrasten<br>
+  <kbd>Q</kbd>/<kbd>E</kbd> drehen · <kbd>0</kbd> gerade · <kbd>Entf</kbd> entfernen · <kbd>⌘A</kbd> alle · <kbd>⌘Z</kbd> zurück · <kbd>G</kbd> Raster
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="drop" hidden>Fotos hier ablegen</div>
+
+<input id="file-photos" type="file" accept="image/*" multiple hidden>
+<input id="file-open" type="file" accept=".json,.html,application/json,text/html" hidden>
+
+<dialog id="dlg-board">
+  <form method="dialog" id="form-board" novalidate>
+    <h2 id="board-dlg-title">Neues Board</h2>
+    <label for="f-title">Name</label>
+    <input id="f-title" type="text" autocomplete="off" maxlength="80">
+    <label for="f-desc">Beschreibung <span class="opt">(erscheint, wenn du den Link teilst)</span></label>
+    <input id="f-desc" type="text" autocomplete="off" maxlength="200" placeholder="zum Beispiel: Bilder vom Sommer 2026">
+    <label for="f-slug">Adresse</label>
+    <input id="f-slug" type="text" autocomplete="off" maxlength="50" spellcheck="false" autocapitalize="off">
+    <div class="hint" id="f-url"></div>
+    <label class="check" id="f-copy-row"><input id="f-copy" type="checkbox"> Fotos vom aktuellen Board übernehmen</label>
+    <div class="error" id="f-error" role="alert"></div>
+    <div class="actions">
+      <button type="button" data-close>Abbrechen</button>
+      <button type="submit" value="ok" class="primary" id="f-ok">Anlegen</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-confirm">
+  <form method="dialog">
+    <h2 id="c-title"></h2>
+    <p id="c-text"></p>
+    <div class="actions">
+      <button type="button" data-close>Abbrechen</button>
+      <button type="submit" value="ok" class="primary" id="c-ok">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-publish">
+  <h2>Veröffentlichen</h2>
+  <div id="pub-body"></div>
+  <div class="actions">
+    <button type="button" id="pub-close">Abbrechen</button>
+    <button type="button" class="primary" id="pub-go">Jetzt veröffentlichen</button>
+  </div>
+</dialog>
+
+<!--
+  Vorlage für die index.html der Boards. Die Platzhalter in doppelten
+  geschweiften Klammern werden beim Speichern ersetzt, die escapten
+  schliessenden Script-Tags durch echte.
+-->
+<script type="text/x-viewer-template" id="viewer-template">
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
+<title>{{title}}</title>
+<meta name="description" content="{{description}}">
+{{social}}
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  body {
+    color: #eee;
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  #stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+  }
+  #stage.dragging, #stage.dragging .photo { cursor: grabbing; }
+  #world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  #world.ready { opacity: 1; }
+  .photo {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--size);
+    height: var(--size);
+    background: #111;
+    cursor: zoom-in;
+  }
+  .photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  .photo.missing img { visibility: hidden; }
+
+  #nav {
+    position: fixed;
+    left: max(12px, env(safe-area-inset-left));
+    top: max(12px, env(safe-area-inset-top));
+    z-index: 5;
+    font-size: 14px;
+  }
+  #nav[hidden], #nav-list[hidden] { display: none; }
+  #nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 24px);
+    padding: 8px 12px 8px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(28, 28, 28, 0.78);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: #eee;
+    font: inherit;
+    cursor: pointer;
+  }
+  #nav-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #nav-btn svg { flex: none; width: 16px; height: 16px; transition: transform 0.2s ease; }
+  #nav-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+  #nav-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  #nav-list {
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(70vh, 560px);
+    margin-top: 8px;
+    padding: 6px;
+    overflow-y: auto;
+    border-radius: 14px;
+    background: rgba(22, 22, 22, 0.92);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+  #nav-list a {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 6px;
+    border-radius: 10px;
+    color: #eee;
+    text-decoration: none;
+  }
+  #nav-list a:hover, #nav-list a:focus-visible { background: rgba(255, 255, 255, 0.08); outline: none; }
+  #nav-list a[aria-current="page"] { background: rgba(255, 255, 255, 0.13); }
+  #nav-list img {
+    display: block;
+    width: 96px;
+    aspect-ratio: 1200 / 630;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111;
+  }
+  #nav-list b { display: block; font-weight: 600; }
+  #nav-list small { color: #9a9a9a; font-size: 12px; }
+
+  .pswp { --pswp-bg: #000; }
+  .pswp__img { -webkit-user-drag: none; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="world"></div></div>
+
+<nav id="nav" aria-label="Boards" hidden>
+  <button id="nav-btn" type="button" aria-expanded="false" aria-controls="nav-list">
+    <span id="nav-title"></span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+  </button>
+  <div id="nav-list" hidden></div>
+</nav>
+
+<script id="fotoboard-data" type="application/json">{{data}}<\/script>
+<script>
+(() => {
+  'use strict';
+  const DATA = JSON.parse(document.getElementById('fotoboard-data').textContent);
+
+  const S = DATA.size || 300;
+  const SLUG = DATA.slug || '';
+  const BASE = SLUG ? '../' : '';
+  const items = DATA.items.slice().sort((a, b) => a.z - b.z);
+  const TAP = 8;            // ab so vielen Pixeln gilt ein Druck als Ziehen
+  const MAX_SCALE = 4;
+  // Versionen der Fotos: beim Hineinzoomen wird die nächstgrössere geladen
+  const LEVELS = [['board', 500], ['mittel', 1000], ['gross', 2000]];
+
+  const stage = document.getElementById('stage');
+  const world = document.getElementById('world');
+  const src = (dir, name) => BASE + 'fotos/' + dir + '/' + encodeURIComponent(name);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  world.style.setProperty('--size', S + 'px');
+
+  const tiles = items.map((it, i) => {
+    const tile = document.createElement('div');
+    tile.className = 'photo';
+    tile.dataset.i = i;
+    tile.style.transform = 'translate(' + it.x + 'px, ' + it.y + 'px) rotate(' + (it.rot || 0) + 'deg)';
+    tile.style.zIndex = i + 1;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    img.decoding = 'async';
+    img.addEventListener('error', () => tile.classList.add('missing'), { once: true });
+    img.src = src('board', it.name);
+    tile.append(img);
+    world.append(tile);
+    return tile;
+  });
+
+  // Umriss jedes Fotos und des ganzen Boards, gedrehte Fotos mitgerechnet
+  const boxes = items.map((it) => {
+    const r = (it.rot || 0) * Math.PI / 180;
+    const h = S / 2 * (Math.abs(Math.cos(r)) + Math.abs(Math.sin(r)));
+    const cx = it.x + S / 2, cy = it.y + S / 2;
+    return { l: cx - h, t: cy - h, r: cx + h, b: cy + h };
+  });
+  const box = boxes.length ? {
+    minX: Math.min(...boxes.map((b) => b.l)),
+    minY: Math.min(...boxes.map((b) => b.t)),
+    maxX: Math.max(...boxes.map((b) => b.r)),
+    maxY: Math.max(...boxes.map((b) => b.b)),
+  } : { minX: 0, minY: 0, maxX: S, maxY: S };
+
+  // ---------- Ansicht: verschieben und zoomen ----------
+  const view = { x: 0, y: 0, s: 1 };
+  let minScale = 0.05;
+  let touched = false;
+
+  function apply() {
+    world.style.transform = 'translate(' + view.x + 'px, ' + view.y + 'px) scale(' + view.s + ')';
+    scheduleSharp();
+  }
+
+  // Die Bildschirmmitte bleibt immer über dem Board, so geht es nie verloren.
+  function keepInside() {
+    const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
+    view.x = clamp(view.x, cx - box.maxX * view.s, cx - box.minX * view.s);
+    view.y = clamp(view.y, cy - box.maxY * view.s, cy - box.minY * view.s);
+  }
+
+  function fit() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const pad = Math.round(Math.min(w, h) * 0.04) + 12;
+    const bw = box.maxX - box.minX, bh = box.maxY - box.minY;
+    const s = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh, 2);
+    minScale = Math.min(s * 0.5, 1);
+    view.s = s;
+    view.x = (w - bw * s) / 2 - box.minX * s;
+    view.y = (h - bh * s) / 2 - box.minY * s;
+    apply();
+  }
+
+  function zoomAt(cx, cy, s) {
+    s = clamp(s, minScale, MAX_SCALE);
+    const k = s / view.s;
+    view.x = cx - (cx - view.x) * k;
+    view.y = cy - (cy - view.y) * k;
+    view.s = s;
+    keepInside();
+    apply();
+  }
+
+  // ---------- Scharf beim Hineinzoomen ----------
+  const sharp = items.map(() => ({ level: 0, want: 0, broken: {} }));
+  let sharpTimer = 0;
+
+  function scheduleSharp() {
+    clearTimeout(sharpTimer);
+    sharpTimer = setTimeout(updateSharp, 160);
+  }
+
+  function updateSharp() {
+    const px = S * view.s * (window.devicePixelRatio || 1);
+    const need = px > LEVELS[1][1] * 1.15 ? 2 : px > LEVELS[0][1] * 1.15 ? 1 : 0;
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const wx = (sx) => (sx - view.x) / view.s, wy = (sy) => (sy - view.y) / view.s;
+    // nah: wird scharf geladen; weit weg: zurück auf die kleine Version
+    const near = { l: wx(-w * 0.25), r: wx(w * 1.25), t: wy(-h * 0.25), b: wy(h * 1.25) };
+    const far = { l: wx(-w), r: wx(2 * w), t: wy(-h), b: wy(2 * h) };
+    const hits = (b, a) => b.r > a.l && b.l < a.r && b.b > a.t && b.t < a.b;
+    boxes.forEach((b, i) => {
+      if (tiles[i].classList.contains('missing')) return;
+      let level = sharp[i].want;
+      if (hits(b, near)) level = need;
+      else if (!hits(b, far)) level = 0;
+      else level = Math.min(level, need);
+      setLevel(i, level);
+    });
+  }
+
+  function setLevel(i, level) {
+    const st = sharp[i];
+    while (level > 0 && st.broken[level]) level--;   // fehlt eine Version, die kleinere nehmen
+    if (level === st.want) return;
+    st.want = level;
+    const img = tiles[i].firstChild;
+    const url = src(LEVELS[level][0], items[i].name);
+    if (level === 0) { img.src = url; st.level = 0; return; }
+    const pre = new Image();
+    pre.decoding = 'async';
+    pre.src = url;
+    const loaded = pre.decode ? pre.decode() : new Promise((ok, fail) => { pre.onload = ok; pre.onerror = fail; });
+    loaded.then(() => {
+      if (st.want === level) { img.src = url; st.level = level; }
+    }, () => {
+      st.broken[level] = true;
+      if (st.want === level) { st.want = -1; setLevel(i, level - 1); }
+    });
+  }
+
+  // ---------- Ziehen, Pinch, Mausrad ----------
+  const pts = new Map();
+  let g = null;
+
+  function startPinch() {
+    const [a, b] = [...pts.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    g = {
+      type: 'pinch',
+      d0: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+      s0: view.s,
+      wx: (mx - view.x) / view.s,
+      wy: (my - view.y) / view.s,
+    };
+  }
+
+  function startPan(id, x, y, moved, photo) {
+    g = { type: 'pan', id, sx: x, sy: y, vx: view.x, vy: view.y, moved, photo };
+  }
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    touched = true;
+    try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) {
+      const tile = e.target.closest('.photo');
+      startPan(e.pointerId, e.clientX, e.clientY, false, tile ? +tile.dataset.i : -1);
+    } else if (pts.size === 2) {
+      startPinch();
+    }
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p || !g) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+    if (g.type === 'pan' && e.pointerId === g.id) {
+      const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+      if (!g.moved && Math.hypot(dx, dy) < TAP) return;
+      if (!g.moved) { g.moved = true; stage.classList.add('dragging'); }
+      view.x = g.vx + dx;
+      view.y = g.vy + dy;
+      keepInside();
+      apply();
+    } else if (g.type === 'pinch' && pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const s = clamp(g.s0 * Math.hypot(b.x - a.x, b.y - a.y) / g.d0, minScale, MAX_SCALE);
+      view.s = s;
+      view.x = mx - g.wx * s;
+      view.y = my - g.wy * s;
+      keepInside();
+      apply();
+    }
+  });
+
+  function pointerEnd(e) {
+    if (!pts.delete(e.pointerId) || !g) return;
+    if (g.type === 'pan' && g.id === e.pointerId) {
+      if (!g.moved && e.type === 'pointerup' && g.photo >= 0) openLightbox(g.photo);
+      stage.classList.remove('dragging');
+      g = null;
+    } else if (g.type === 'pinch') {
+      if (pts.size >= 2) startPinch();
+      else if (pts.size === 1) {
+        const [[id, p]] = pts;
+        startPan(id, p.x, p.y, true, -1);
+      } else g = null;
+    }
+  }
+  stage.addEventListener('pointerup', pointerEnd);
+  stage.addEventListener('pointercancel', pointerEnd);
+
+  // Mausrad und Trackpad. Pinch auf dem Trackpad kommt als Rad mit ctrlKey.
+  let gestureScale = null;
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.ctrlKey && gestureScale !== null) return;
+    touched = true;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? stage.clientHeight : 1;
+    const k = e.ctrlKey ? 0.01 : 0.002;
+    zoomAt(e.clientX, e.clientY, view.s * Math.exp(-e.deltaY * unit * k));
+  }, { passive: false });
+
+  // Seitenzoom überall verhindern (Strg+Rad, Safari-Gesten)
+  window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+  document.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+    gestureScale = pts.size < 2 && !pswp && !opening ? view.s : null;
+  });
+  document.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    if (gestureScale === null || pts.size >= 2) return;
+    touched = true;
+    const x = e.clientX ?? stage.clientWidth / 2, y = e.clientY ?? stage.clientHeight / 2;
+    zoomAt(x, y, gestureScale * e.scale);
+  });
+  document.addEventListener('gestureend', (e) => { e.preventDefault(); gestureScale = null; });
+
+  window.addEventListener('resize', () => {
+    if (touched) { keepInside(); apply(); } else fit();
+  });
+
+  // ---------- Andere Boards ----------
+  const nav = document.getElementById('nav');
+  const navBtn = document.getElementById('nav-btn');
+  const navList = document.getElementById('nav-list');
+  const boards = Array.isArray(DATA.boards) ? DATA.boards : [];
+
+  function link(slug, file) {
+    const dir = BASE + (slug ? encodeURIComponent(slug) + '/' : '');
+    return (dir || './') + (file || '');
+  }
+
+  function toggleNav(open) {
+    open = open ?? navList.hidden;
+    navList.hidden = !open;
+    navBtn.setAttribute('aria-expanded', String(open));
+  }
+
+  if (boards.length > 1) {
+    nav.hidden = false;
+    document.getElementById('nav-title').textContent = DATA.title || 'Fotoboard';
+    for (const b of boards) {
+      const a = document.createElement('a');
+      a.href = link(b.slug);
+      if ((b.slug || '') === SLUG) a.setAttribute('aria-current', 'page');
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.addEventListener('error', () => { img.style.visibility = 'hidden'; }, { once: true });
+      img.src = link(b.slug, 'vorschau.jpg');
+      const text = document.createElement('span');
+      const title = document.createElement('b');
+      title.textContent = b.title || 'Fotoboard';
+      const count = document.createElement('small');
+      count.textContent = b.count === 1 ? '1 Foto' : (b.count || 0) + ' Fotos';
+      text.append(title, count);
+      a.append(img, text);
+      navList.append(a);
+    }
+    navBtn.addEventListener('click', () => toggleNav());
+    document.addEventListener('pointerdown', (e) => {
+      if (!navList.hidden && !nav.contains(e.target)) toggleNav(false);
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !navList.hidden) { toggleNav(false); navBtn.focus(); }
+    });
+  }
+
+  // ---------- Grossansicht (PhotoSwipe) ----------
+  // Zeigt sofort das Foto vom Board und lädt im Hintergrund schärfere Versionen.
+  // Beim Hineinzoomen wählt der Browser über srcset die nächstgrössere.
+  const BIG = [['mittel', 1000], ['gross', 2000], ['voll', 4000]];
+  const NOMINAL = 4000;     // so gross gilt ein Foto für PhotoSwipe (Zoomstufe 1)
+
+  // Reihenfolge zum Blättern: zeilenweise von links oben nach rechts unten
+  const order = (() => {
+    const centers = items.map((it, i) => ({ i, x: it.x + S / 2, y: it.y + S / 2 })).sort((a, b) => a.y - b.y);
+    const rows = [];
+    for (const p of centers) {
+      const row = rows[rows.length - 1];
+      if (row && Math.abs(p.y - row.y) < S / 2) row.list.push(p);
+      else rows.push({ y: p.y, list: [p] });
+    }
+    return rows.flatMap((r) => r.list.sort((a, b) => a.x - b.x).map((p) => p.i));
+  })();
+
+  let pswp = null;
+  let opening = false;
+  let pswpReady = null;
+
+  function loadPhotoSwipe() {
+    if (!pswpReady) {
+      if (!document.getElementById('pswp-css')) {
+        const css = document.createElement('link');
+        css.id = 'pswp-css';
+        css.rel = 'stylesheet';
+        css.href = BASE + 'lib/photoswipe/photoswipe.css';
+        document.head.append(css);
+      }
+      pswpReady = new Promise((resolve, reject) => {
+        const js = document.createElement('script');
+        js.src = BASE + 'lib/photoswipe/photoswipe.umd.min.js';
+        js.onload = () => (window.PhotoSwipe ? resolve(window.PhotoSwipe) : reject(new Error('PhotoSwipe fehlt')));
+        js.onerror = () => { js.remove(); pswpReady = null; reject(new Error('PhotoSwipe nicht geladen')); };
+        document.head.append(js);
+      });
+    }
+    return pswpReady;
+  }
+
+  function slide(i) {
+    const name = items[i].name;
+    const thumb = tiles[i].firstChild;
+    const ar = thumb.naturalWidth && thumb.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 1;
+    const w = ar >= 1 ? NOMINAL : Math.round(NOMINAL * ar);
+    const h = ar >= 1 ? Math.round(NOMINAL / ar) : NOMINAL;
+    return {
+      src: src('gross', name),
+      srcset: BIG.map(([dir, px]) => src(dir, name) + ' ' + Math.round(px * w / NOMINAL) + 'w').join(', '),
+      msrc: thumb.currentSrc || thumb.getAttribute('src') || src('board', name),
+      width: w,
+      height: h,
+      alt: 'Foto',
+    };
+  }
+
+  async function openLightbox(i) {
+    const start = order.indexOf(i);
+    if (start < 0 || pswp || opening) return;
+    toggleNav(false);
+    opening = true;
+    let PS;
+    try {
+      PS = await loadPhotoSwipe();
+    } catch (_) {
+      return;
+    } finally {
+      opening = false;
+    }
+    pswp = new PS({
+      dataSource: order.map(slide),
+      index: start,
+      bgOpacity: 0.94,
+      showHideAnimationType: 'fade',
+      wheelToZoom: true,
+      maxZoomLevel: (zl) => Math.max(1, zl.fit * 6),
+      closeTitle: 'Schliessen',
+      zoomTitle: 'Zoomen',
+      arrowPrevTitle: 'Vorheriges Foto',
+      arrowNextTitle: 'Nächstes Foto',
+      errorMsg: 'Das Foto lässt sich nicht laden.',
+    });
+    pswp.on('destroy', () => { pswp = null; });
+    pswp.init();
+  }
+
+  // Safari auf dem Mac meldet das Zoomen mit dem Trackpad als «Geste» statt
+  // als Mausrad. Dann zoomen wir in der Grossansicht selbst.
+  let ctrlWheel = false;
+  let pswpGesture = null;
+  window.addEventListener('wheel', (e) => { if (e.ctrlKey) ctrlWheel = true; }, { capture: true, passive: true });
+  document.addEventListener('gesturestart', () => {
+    const s = pswp && pswp.currSlide;
+    pswpGesture = s && !ctrlWheel && !navigator.maxTouchPoints ? s.currZoomLevel : null;
+  });
+  document.addEventListener('gesturechange', (e) => {
+    if (pswpGesture === null || !pswp || !pswp.currSlide || ctrlWheel) return;
+    pswp.currSlide.zoomTo(pswpGesture * e.scale, { x: e.clientX, y: e.clientY }, 0);
+  });
+  document.addEventListener('gestureend', () => { pswpGesture = null; });
+
+  fit();
+  requestAnimationFrame(() => world.classList.add('ready'));
+  setTimeout(() => loadPhotoSwipe().catch(() => {}), 800);
+})();
+<\/script>
+</body>
+</html>
+</script>
+
+<script>
+(() => {
+  'use strict';
+
+  const GRID = 40;          // Rasterweite in px: 300 px Foto + 20 px Lücke = 8 Schritte
+  const GAP = 20;           // Abstand neuer Fotos
+  const ROT_STEP = 15;      // Grad pro Q/E
+  const THUMB = 600;        // grössere Dateien werden im Editor verkleinert
+  const MIN_SCALE = 0.03;
+  const MAX_SCALE = 6;
+  const DRAG = 3;           // ab so vielen Pixeln beginnt das Ziehen
+  const SNAP_PX = 7;        // so nah (Bildschirmpixel) muss eine Kante sein, damit sie einrastet
+  const UNDO_MAX = 200;
+  const LS_BOARDS = 'fotoboard.boards';
+  const LS_OLD = 'fotoboard.layout';   // früheres Format mit nur einem Board
+  const LS_UI = 'fotoboard.ui';
+  const LS_SITE = 'fotoboard.site';
+  const RESERVED = ['fotos', 'originale', 'api', 'lib'];
+  const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$/;
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage');
+  const world = $('world');
+  const toolbar = $('toolbar');
+  const statusEl = $('status');
+  const toastEl = $('toast');
+  const emptyEl = $('empty');
+  const dropEl = $('drop');
+  const marqueeEl = $('marquee');
+  const menuEl = $('board-menu');
+  const btnBoard = $('btn-board');
+  const btnGrid = $('btn-grid');
+  const inputPhotos = $('file-photos');
+  const inputOpen = $('file-open');
+  const guidesEl = document.createElement('div');
+  guidesEl.id = 'guides';
+  world.append(guidesEl);
+
+  const TEMPLATE = $('viewer-template').textContent
+    .split('<\\/script>').join('<\/script>')
+    .replace(/^\s+/, '');
+
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const MOD = isMac ? '⌘' : 'Strg';
+  const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const snap = (v) => Math.round(v / GRID) * GRID;
+  const normRot = (r) => {
+    r = ((Math.round(r) % 360) + 360) % 360;
+    return r > 180 ? r - 360 : r;
+  };
+  const clone = (list) => list.map((it) => ({ ...it }));
+  const plural = (n, one, many) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
+  const validSlug = (s) => s === '' || (typeof s === 'string' && SLUG_RE.test(s) && !RESERVED.includes(s));
+
+  // ---------- Zustand ----------
+  let boards = [];                // {slug, title, description, size, items, dirty, rev, html}
+  let cur = null;                 // das Board, das gerade offen ist
+  let server = null;              // Antwort von fotoboard.py; null heisst: als Datei geöffnet
+  let site = '';                  // öffentliche Adresse, z. B. https://name.github.io/fotoboard/
+  const images = new Map();       // Dateiname -> Bild-URL
+  const serverPhotos = new Map(); // Dateiname -> Version (nur mit fotoboard.py)
+  const els = new Map();          // Dateiname -> Element
+  const selection = new Set();    // ausgewählte Dateinamen
+  const undoStack = [];
+  const redoStack = [];
+  const view = { x: 0, y: 0, s: 1 };
+  let views = {};                 // letzte Ansicht pro Board
+  let pendingDeletes = [];        // Boards, deren Ordner noch gelöscht werden muss
+  let grid = true;
+  let busy = false;
+  let saveState = { kind: 'ok', msg: '' };
+
+  const byName = (name) => cur.items.find((it) => it.name === name);
+  const maxZ = () => cur.items.reduce((m, it) => Math.max(m, it.z), 0);
+  const selectedItems = () => cur.items.filter((it) => selection.has(it.name));
+
+  // ---------- Darstellung ----------
+  function elFor(item) {
+    let el = els.get(item.name);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'photo';
+      el.dataset.name = item.name;
+      const img = document.createElement('img');
+      img.alt = '';
+      img.draggable = false;
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = item.name;
+      el.append(img, label);
+      world.append(el);
+      els.set(item.name, el);
+    }
+    return el;
+  }
+
+  function draw(item) {
+    const el = elFor(item);
+    el.style.transform = `translate(${item.x}px, ${item.y}px) rotate(${item.rot}deg)`;
+    el.style.zIndex = item.z;
+    el.title = item.name;
+    const url = images.get(item.name);
+    const img = el.firstChild;
+    if (url) {
+      if (img.getAttribute('src') !== url) img.src = url;
+    } else {
+      img.removeAttribute('src');
+    }
+    el.classList.toggle('placeholder', !url);
+    el.classList.toggle('selected', selection.has(item.name));
+  }
+
+  function drawAll() {
+    const names = new Set(cur.items.map((it) => it.name));
+    for (const [name, el] of els) {
+      if (!names.has(name)) { el.remove(); els.delete(name); }
+    }
+    for (const name of [...selection]) if (!names.has(name)) selection.delete(name);
+    world.style.setProperty('--size', cur.size + 'px');
+    cur.items.forEach(draw);
+    emptyEl.hidden = cur.items.length > 0;
+    updateStatus();
+  }
+
+  function refreshSelection() {
+    for (const [name, el] of els) el.classList.toggle('selected', selection.has(name));
+    updateStatus();
+  }
+
+  function setSelection(names) {
+    selection.clear();
+    for (const n of names) selection.add(n);
+    refreshSelection();
+  }
+
+  function updateStatus(text) {
+    if (text) { statusEl.textContent = text; return; }
+    const missing = cur.items.filter((it) => !images.has(it.name)).length;
+    const parts = [
+      `<b>${cur.items.length}</b> Fotos`,
+      missing ? `<b>${missing}</b> ohne Datei` : null,
+      `Zoom <b>${Math.round(view.s * 100)} %</b>`,
+      `Raster <b>${grid ? 'an' : 'aus'}</b>`,
+    ];
+    const sel = selectedItems();
+    if (sel.length === 1) parts.push(`Ausgewählt: <b>${escapeHtml(sel[0].name)}</b> ${sel[0].rot}°`);
+    else if (sel.length > 1) parts.push(`<b>${sel.length}</b> ausgewählt`);
+    if (!server) parts.push('im Browser gespeichert');
+    else if (saveState.kind === 'ok') parts.push('<span class="ok">✓ gespeichert</span>');
+    else if (saveState.kind === 'saving') parts.push('speichert …');
+    else parts.push(`<span class="warn">⚠ nicht gespeichert: ${escapeHtml(saveState.msg)}</span>`);
+    statusEl.innerHTML = parts.filter(Boolean).join(' · ');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+
+  let toastTimer = 0;
+  function toast(msg, ms = 3200) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+  }
+
+  function updateBoardButton() {
+    $('board-name').textContent = cur.title || 'Fotoboard';
+    document.title = `${cur.title || 'Fotoboard'} · Fotoboard Editor`;
+  }
+
+  // ---------- Ansicht ----------
+  function applyView() {
+    world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
+    world.style.setProperty('--inv', (1 / view.s).toFixed(4));
+    let step = GRID * view.s;
+    while (step < 8) step *= 5;   // bei kleinem Zoom nur jeden 5. Punkt zeigen
+    stage.style.setProperty('--g', step + 'px');
+    stage.style.setProperty('--gx', (view.x - step / 2) + 'px');
+    stage.style.setProperty('--gy', (view.y - step / 2) + 'px');
+    updateStatus();
+    saveUiSoon();
+  }
+
+  function zoomAt(cx, cy, s) {
+    s = clamp(s, MIN_SCALE, MAX_SCALE);
+    const k = s / view.s;
+    view.x = cx - (cx - view.x) * k;
+    view.y = cy - (cy - view.y) * k;
+    view.s = s;
+    applyView();
+  }
+
+  // Umriss eines Fotos; gedrehte Fotos brauchen mehr Platz
+  function boxOf(it) {
+    const r = it.rot * Math.PI / 180;
+    const h = Math.round(cur.size / 2 * (Math.abs(Math.cos(r)) + Math.abs(Math.sin(r))) * 1e6) / 1e6;
+    const cx = it.x + cur.size / 2, cy = it.y + cur.size / 2;
+    return { l: cx - h, r: cx + h, t: cy - h, b: cy + h, cx, cy };
+  }
+
+  function unionBox(list) {
+    if (!list.length) return null;
+    const bs = list.map(boxOf);
+    const l = Math.min(...bs.map((b) => b.l)), r = Math.max(...bs.map((b) => b.r));
+    const t = Math.min(...bs.map((b) => b.t)), b = Math.max(...bs.map((b) => b.b));
+    return { l, r, t, b, cx: (l + r) / 2, cy: (t + b) / 2 };
+  }
+
+  function fitAll() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const top = toolbar.getBoundingClientRect().bottom + 20;
+    const pad = 40, bottom = 56;
+    const b = unionBox(cur.items);
+    if (!b) {
+      view.s = 1; view.x = pad; view.y = top;
+      applyView();
+      return;
+    }
+    const aw = Math.max(100, w - 2 * pad), ah = Math.max(100, h - top - bottom);
+    const bw = b.r - b.l, bh = b.b - b.t;
+    const s = clamp(Math.min(aw / bw, ah / bh), MIN_SCALE, 1.5);
+    view.s = s;
+    view.x = pad + (aw - bw * s) / 2 - b.l * s;
+    view.y = top + (ah - bh * s) / 2 - b.t * s;
+    applyView();
+  }
+
+  // ---------- Rückgängig ----------
+  function snapshot(label) {
+    undoStack.push({ label, items: clone(cur.items) });
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+    redoStack.length = 0;
+  }
+
+  function restore(from, to, verb) {
+    const entry = from.pop();
+    if (!entry) return false;
+    to.push({ label: entry.label, items: clone(cur.items) });
+    const countChanged = entry.items.length !== cur.items.length;
+    cur.items = entry.items;
+    drawAll();
+    changed(countChanged);
+    toast(`${verb}: ${entry.label}`);
+    return true;
+  }
+  const undo = () => restore(undoStack, redoStack, 'Rückgängig');
+  const redo = () => restore(redoStack, undoStack, 'Wiederhergestellt');
+
+  // ---------- Ausrichten an Nachbarfotos ----------
+  // Abstände, die auf dem Board schon vorkommen (z. B. 20 px), plus der Standard
+  function boardGaps(bs) {
+    const count = new Map();
+    const add = (v) => {
+      v = Math.round(v);
+      if (v > 0 && v <= cur.size) count.set(v, (count.get(v) || 0) + 1);
+    };
+    for (const a of bs) {
+      let right = Infinity, below = Infinity;
+      for (const c of bs) {
+        if (c === a) continue;
+        if (c.t < a.b && c.b > a.t && c.l >= a.r) right = Math.min(right, c.l - a.r);
+        if (c.l < a.r && c.r > a.l && c.t >= a.b) below = Math.min(below, c.t - a.b);
+      }
+      add(right);
+      add(below);
+    }
+    const list = [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([v]) => v);
+    if (!list.includes(GAP)) list.push(GAP);
+    return list;
+  }
+
+  function moved(box, dx, dy) {
+    const b = { l: box.l + dx, r: box.r + dx, t: box.t + dy, b: box.b + dy };
+    b.cx = (b.l + b.r) / 2;
+    b.cy = (b.t + b.b) / 2;
+    return b;
+  }
+
+  // Sucht die nächste Kante, Mitte oder den passenden Abstand zu einem anderen Foto
+  function findSnap(dg, dx, dy) {
+    const T = SNAP_PX / view.s;
+    const b = moved(dg.box, dx, dy);
+    let ox = null, oy = null;
+    const tryX = (off) => { if (Math.abs(off) <= T && (ox === null || Math.abs(off) < Math.abs(ox))) ox = off; };
+    const tryY = (off) => { if (Math.abs(off) <= T && (oy === null || Math.abs(off) < Math.abs(oy))) oy = off; };
+    for (const o of dg.others) {
+      tryX(o.l - b.l); tryX(o.r - b.l); tryX(o.l - b.r); tryX(o.r - b.r); tryX(o.cx - b.cx);
+      tryY(o.t - b.t); tryY(o.b - b.t); tryY(o.t - b.b); tryY(o.b - b.b); tryY(o.cy - b.cy);
+      if (o.t < b.b && o.b > b.t) {
+        for (const gap of dg.gaps) { tryX(o.r + gap - b.l); tryX(o.l - gap - b.r); }
+      }
+      if (o.l < b.r && o.r > b.l) {
+        for (const gap of dg.gaps) { tryY(o.b + gap - b.t); tryY(o.t - gap - b.b); }
+      }
+    }
+    return { ox: ox ?? 0, oy: oy ?? 0, hitX: ox !== null, hitY: oy !== null };
+  }
+
+  function showGuides(dg, b, hitX, hitY) {
+    guidesEl.textContent = '';
+    if (!dg || (!hitX && !hitY)) return;
+    const eps = 0.5;
+    const line = (cls, x, y, w, h) => {
+      const d = document.createElement('div');
+      d.className = 'guide ' + cls;
+      d.style.left = x + 'px';
+      d.style.top = y + 'px';
+      if (cls === 'v') d.style.height = h + 'px'; else d.style.width = w + 'px';
+      guidesEl.append(d);
+    };
+    const label = (x, y, text) => {
+      const d = document.createElement('div');
+      d.className = 'gap-label';
+      d.style.left = x + 'px';
+      d.style.top = y + 'px';
+      d.textContent = text;
+      guidesEl.append(d);
+    };
+    if (hitX) {
+      for (const v of [b.l, b.cx, b.r]) {
+        const hits = dg.others.filter((o) => [o.l, o.cx, o.r].some((w) => Math.abs(w - v) < eps));
+        if (!hits.length) continue;
+        const t = Math.min(b.t, ...hits.map((o) => o.t)), bt = Math.max(b.b, ...hits.map((o) => o.b));
+        line('v', v, t, 0, bt - t);
+      }
+      for (const o of dg.others) {
+        if (!(o.t < b.b && o.b > b.t)) continue;
+        const y = (Math.max(o.t, b.t) + Math.min(o.b, b.b)) / 2;
+        for (const [x1, x2] of [[o.r, b.l], [b.r, o.l]]) {
+          const gap = Math.round(x2 - x1);
+          if (gap > 0 && dg.gaps.includes(gap) && Math.abs(x2 - x1 - gap) < eps) {
+            line('h', x1, y, gap, 0);
+            label((x1 + x2) / 2, y, gap);
+          }
+        }
+      }
+    }
+    if (hitY) {
+      for (const v of [b.t, b.cy, b.b]) {
+        const hits = dg.others.filter((o) => [o.t, o.cy, o.b].some((w) => Math.abs(w - v) < eps));
+        if (!hits.length) continue;
+        const l = Math.min(b.l, ...hits.map((o) => o.l)), r = Math.max(b.r, ...hits.map((o) => o.r));
+        line('h', l, v, r - l, 0);
+      }
+      for (const o of dg.others) {
+        if (!(o.l < b.r && o.r > b.l)) continue;
+        const x = (Math.max(o.l, b.l) + Math.min(o.r, b.r)) / 2;
+        for (const [y1, y2] of [[o.b, b.t], [b.b, o.t]]) {
+          const gap = Math.round(y2 - y1);
+          if (gap > 0 && dg.gaps.includes(gap) && Math.abs(y2 - y1 - gap) < eps) {
+            line('v', x, y1, 0, gap);
+            label(x, (y1 + y2) / 2, gap);
+          }
+        }
+      }
+    }
+  }
+
+  // ---------- Ziehen, Schieben, Rahmen, Pinch (Pointer Events) ----------
+  const pts = new Map();
+  let g = null;
+
+  function startPinch() {
+    const [a, b] = [...pts.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    g = {
+      type: 'pinch',
+      d0: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+      s0: view.s,
+      wx: (mx - view.x) / view.s,
+      wy: (my - view.y) / view.s,
+    };
+  }
+
+  function startPan(id, x, y, moved) {
+    g = { type: 'pan', id, sx: x, sy: y, vx: view.x, vy: view.y, moved };
+  }
+
+  function startDrag(dg) {
+    dg.moved = true;
+    snapshot(selection.size > 1 ? `${selection.size} Fotos verschieben` : 'Verschieben');
+    dg.group = selectedItems();
+    if (!dg.group.includes(dg.item)) dg.group = [dg.item];
+    const moving = new Set(dg.group.map((it) => it.name));
+    dg.orig = new Map(dg.group.map((it) => [it.name, { x: it.x, y: it.y }]));
+    // Die gezogenen Fotos kommen nach oben, ihre Reihenfolge untereinander bleibt
+    const sorted = cur.items.slice().sort((a, b) => a.z - b.z);
+    const rest = sorted.filter((it) => !moving.has(it.name));
+    const top = sorted.filter((it) => moving.has(it.name));
+    [...rest, ...top].forEach((it, i) => {
+      it.z = i + 1;
+      const el = els.get(it.name);
+      if (el) el.style.zIndex = it.z;
+    });
+    for (const it of dg.group) els.get(it.name)?.classList.remove('snap');
+    dg.others = rest.map(boxOf);
+    dg.gaps = boardGaps(dg.others);
+    dg.box = unionBox(dg.group);
+    dg.hitX = dg.hitY = false;
+    dg.free = false;
+  }
+
+  function moveDrag(dg, e) {
+    let dx = (e.clientX - dg.sx) / view.s, dy = (e.clientY - dg.sy) / view.s;
+    dg.free = e.altKey;
+    dg.hitX = dg.hitY = false;
+    if (!dg.free && dg.others.length) {
+      const s = findSnap(dg, dx, dy);
+      dx += s.ox;
+      dy += s.oy;
+      dg.hitX = s.hitX;
+      dg.hitY = s.hitY;
+    }
+    for (const it of dg.group) {
+      const o = dg.orig.get(it.name);
+      it.x = o.x + dx;
+      it.y = o.y + dy;
+      draw(it);
+    }
+    showGuides(dg, moved(dg.box, dx, dy), dg.hitX, dg.hitY);
+  }
+
+  function finishDrag(dg) {
+    showGuides(null);
+    let cx = 0, cy = 0;
+    if (grid && !dg.free) {
+      if (!dg.hitX) cx = snap(dg.item.x) - dg.item.x;
+      if (!dg.hitY) cy = snap(dg.item.y) - dg.item.y;
+    }
+    const animate = Math.abs(cx) + Math.abs(cy) >= 1;
+    for (const it of dg.group) {
+      it.x = Math.round(it.x + cx);
+      it.y = Math.round(it.y + cy);
+      const el = els.get(it.name);
+      if (el && animate) {
+        el.classList.add('snap');
+        setTimeout(() => el.classList.remove('snap'), 160);
+      }
+      draw(it);
+    }
+    changed();
+  }
+
+  function marqueeMove(mg, e) {
+    const x0 = Math.min(mg.sx, e.clientX), y0 = Math.min(mg.sy, e.clientY);
+    const x1 = Math.max(mg.sx, e.clientX), y1 = Math.max(mg.sy, e.clientY);
+    if (!mg.moved) {
+      if (Math.hypot(x1 - x0, y1 - y0) < DRAG) return;
+      mg.moved = true;
+      marqueeEl.hidden = false;
+    }
+    Object.assign(marqueeEl.style, { left: x0 + 'px', top: y0 + 'px', width: (x1 - x0) + 'px', height: (y1 - y0) + 'px' });
+    const w = { l: (x0 - view.x) / view.s, r: (x1 - view.x) / view.s, t: (y0 - view.y) / view.s, b: (y1 - view.y) / view.s };
+    selection.clear();
+    for (const n of mg.base) selection.add(n);
+    for (const it of cur.items) {
+      const b = boxOf(it);
+      if (b.r > w.l && b.l < w.r && b.b > w.t && b.t < w.b) selection.add(it.name);
+    }
+    refreshSelection();
+  }
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (busy) return;
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+    e.preventDefault();
+    closeMenu();
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pts.size === 1) {
+      const el = e.button === 0 ? e.target.closest('.photo') : null;
+      const item = el && byName(el.dataset.name);
+      const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+      if (item) {
+        if (additive && selection.has(item.name)) {
+          selection.delete(item.name);
+          refreshSelection();
+          g = { type: 'none', id: e.pointerId };
+          return;
+        }
+        if (additive) selection.add(item.name);
+        else if (!selection.has(item.name)) { selection.clear(); selection.add(item.name); }
+        refreshSelection();
+        g = { type: 'drag', id: e.pointerId, item, sx: e.clientX, sy: e.clientY, moved: false, additive };
+      } else if (e.shiftKey && e.button === 0) {
+        g = { type: 'marquee', id: e.pointerId, sx: e.clientX, sy: e.clientY, base: new Set(selection), moved: false };
+      } else {
+        startPan(e.pointerId, e.clientX, e.clientY, false);
+      }
+    } else if (pts.size === 2) {
+      if (g && g.type === 'drag' && g.moved) finishDrag(g);
+      marqueeEl.hidden = true;
+      startPinch();
+    }
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p || !g) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+
+    if (g.type === 'drag' && e.pointerId === g.id) {
+      if (!g.moved) {
+        if (Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < DRAG) return;
+        startDrag(g);
+      }
+      moveDrag(g, e);
+    } else if (g.type === 'marquee' && e.pointerId === g.id) {
+      marqueeMove(g, e);
+    } else if (g.type === 'pan' && e.pointerId === g.id) {
+      const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+      if (!g.moved) {
+        if (Math.hypot(dx, dy) < DRAG) return;
+        g.moved = true;
+        stage.classList.add('panning');
+      }
+      view.x = g.vx + dx;
+      view.y = g.vy + dy;
+      applyView();
+    } else if (g.type === 'pinch' && pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const s = clamp(g.s0 * Math.hypot(b.x - a.x, b.y - a.y) / g.d0, MIN_SCALE, MAX_SCALE);
+      view.s = s;
+      view.x = mx - g.wx * s;
+      view.y = my - g.wy * s;
+      applyView();
+    }
+  });
+
+  function pointerEnd(e) {
+    if (!pts.delete(e.pointerId) || !g) return;
+    if (g.type === 'drag' && g.id === e.pointerId) {
+      if (g.moved) finishDrag(g);
+      else if (!g.additive && e.type === 'pointerup' && selection.size > 1) setSelection([g.item.name]);
+      g = null;
+    } else if (g.type === 'marquee' && g.id === e.pointerId) {
+      marqueeEl.hidden = true;
+      g = null;
+    } else if (g.type === 'none' && g.id === e.pointerId) {
+      g = null;
+    } else if (g.type === 'pan' && g.id === e.pointerId) {
+      if (!g.moved && e.type === 'pointerup') setSelection([]);
+      stage.classList.remove('panning');
+      g = null;
+    } else if (g.type === 'pinch') {
+      if (pts.size >= 2) startPinch();
+      else if (pts.size === 1) {
+        const [[id, p]] = pts;
+        startPan(id, p.x, p.y, true);
+      } else g = null;
+    }
+  }
+  stage.addEventListener('pointerup', pointerEnd);
+  stage.addEventListener('pointercancel', pointerEnd);
+
+  // Mausrad zoomt, Trackpad-Pinch kommt als Rad mit ctrlKey
+  let gestureScale = null;
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.ctrlKey && gestureScale !== null) return;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? stage.clientHeight : 1;
+    const k = e.ctrlKey ? 0.01 : 0.002;
+    zoomAt(e.clientX, e.clientY, view.s * Math.exp(-e.deltaY * unit * k));
+  }, { passive: false });
+  window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+
+  // Safari meldet Trackpad-Pinch als eigene Gesten-Events
+  document.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+    gestureScale = pts.size < 2 ? view.s : null;
+  });
+  document.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    if (gestureScale === null || pts.size >= 2) return;
+    const x = e.clientX ?? stage.clientWidth / 2, y = e.clientY ?? stage.clientHeight / 2;
+    zoomAt(x, y, gestureScale * e.scale);
+  });
+  document.addEventListener('gestureend', (e) => { e.preventDefault(); gestureScale = null; });
+
+  // ---------- Bearbeiten ----------
+  function rotateSelection(fn) {
+    const list = selectedItems();
+    if (!list.length) return;
+    snapshot('Drehen');
+    for (const it of list) {
+      it.rot = normRot(fn(it.rot));
+      draw(it);
+    }
+    changed();
+  }
+
+  function removeSelection() {
+    const list = selectedItems();
+    if (!list.length) return;
+    snapshot(list.length === 1 ? 'Entfernen' : `${list.length} Fotos entfernen`);
+    cur.items = cur.items.filter((it) => !selection.has(it.name));
+    selection.clear();
+    drawAll();
+    changed(true);
+    toast(list.length === 1
+      ? `${list[0].name} entfernt · ${MOD}+Z holt es zurück`
+      : `${list.length} Fotos entfernt · ${MOD}+Z holt sie zurück`);
+  }
+
+  let lastNudge = 0;
+  function nudge(dx, dy) {
+    const list = selectedItems();
+    if (!list.length) return;
+    const label = 'Verschieben mit Pfeiltasten';
+    if (!(Date.now() - lastNudge < 1000 && undoStack.at(-1)?.label === label)) snapshot(label);
+    lastNudge = Date.now();
+    for (const it of list) {
+      it.x += dx;
+      it.y += dy;
+      draw(it);
+    }
+    changed();
+  }
+
+  function snapAll() {
+    const off = cur.items.filter((it) => it.x !== snap(it.x) || it.y !== snap(it.y));
+    if (!off.length) { toast(`Alle Fotos liegen schon auf dem ${GRID}-px-Raster`); return; }
+    snapshot('Einrasten');
+    for (const it of off) {
+      it.x = snap(it.x);
+      it.y = snap(it.y);
+      const el = els.get(it.name);
+      if (el) {
+        el.classList.add('snap');
+        setTimeout(() => el.classList.remove('snap'), 160);
+      }
+      draw(it);
+    }
+    changed();
+    toast(`${off.length} Fotos aufs Raster gesetzt · ${MOD}+Z macht es rückgängig`);
+  }
+
+  function toggleGrid() {
+    grid = !grid;
+    stage.classList.toggle('grid', grid);
+    btnGrid.setAttribute('aria-pressed', String(grid));
+    updateStatus();
+    saveUiSoon();
+    toast(grid ? `Raster an: Fotos rasten beim Loslassen auf ${GRID} px ein` : 'Raster aus');
+  }
+
+  const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement || document.querySelector('dialog[open]')) return;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (key === 'Escape') {
+      if (!menuEl.hidden) { closeMenu(); btnBoard.focus(); } else setSelection([]);
+      return;
+    }
+    if (busy || !menuEl.hidden) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && key === 'z') {
+      if (e.shiftKey ? redo() : undo()) e.preventDefault();
+      return;
+    }
+    if (mod && key === 'y' && !isMac) {
+      if (redo()) e.preventDefault();
+      return;
+    }
+    if (mod && key === 'a') {
+      setSelection(cur.items.map((it) => it.name));
+      e.preventDefault();
+      return;
+    }
+    if (ARROWS[key] && selection.size && !mod) {
+      const step = e.altKey ? 1 : grid ? GRID : 10;
+      nudge(ARROWS[key][0] * step, ARROWS[key][1] * step);
+      e.preventDefault();
+      return;
+    }
+    if (mod || e.altKey) return;
+    if (key === 'g') { toggleGrid(); e.preventDefault(); return; }
+    if (!selection.size) return;
+    if (key === 'q') rotateSelection((r) => r - ROT_STEP);
+    else if (key === 'e') rotateSelection((r) => r + ROT_STEP);
+    else if (key === '0') rotateSelection(() => 0);
+    else if (key === 'Delete' || key === 'Backspace') removeSelection();
+    else return;
+    e.preventDefault();
+  });
+
+  // ---------- Fotos laden ----------
+  const photoUrl = (name, v) => `fotos/board/${encodeURIComponent(name)}?v=${v}`;
+
+  async function thumbnail(file) {
+    if (typeof createImageBitmap !== 'function') return URL.createObjectURL(file);
+    const bmp = await createImageBitmap(file);
+    const short = Math.min(bmp.width, bmp.height);
+    if (short <= THUMB) {
+      bmp.close();
+      return URL.createObjectURL(file);
+    }
+    const k = THUMB / short;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * k);
+    canvas.height = Math.round(bmp.height * k);
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    bmp.close();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    return URL.createObjectURL(blob || file);
+  }
+
+  function placeNew(names) {
+    if (!names.length) return;
+    const step = cur.size + GAP;
+    const aspect = clamp(stage.clientWidth / Math.max(1, stage.clientHeight), 0.5, 3);
+    const cols = Math.max(1, Math.round(Math.sqrt(names.length * aspect)));
+    const b = unionBox(cur.items);
+    const x0 = b ? Math.ceil((b.r + 2 * GAP) / GRID) * GRID : 0;
+    const y0 = b ? Math.floor(b.t / GRID) * GRID : 0;
+    let z = maxZ();
+    names.forEach((name, i) => {
+      cur.items.push({
+        name,
+        x: x0 + (i % cols) * step,
+        y: y0 + Math.floor(i / cols) * step,
+        rot: 0,
+        z: ++z,
+      });
+    });
+  }
+
+  function setBusy(on) {
+    busy = on;
+    for (const b of toolbar.querySelectorAll('button')) b.disabled = on;
+  }
+
+  async function upload(file) {
+    const res = await fetch('api/upload?name=' + encodeURIComponent(file.name), {
+      method: 'POST',
+      headers: { 'X-Fotoboard': '1', 'Content-Type': 'application/octet-stream' },
+      body: file,
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok || !data || !data.ok) throw new Error((data && data.error) || `Fehler ${res.status}`);
+    return data.v;
+  }
+
+  async function addFiles(fileList) {
+    const files = [...fileList].filter((f) =>
+      f.type.startsWith('image/') || /\.(jpe?g|png|webp|avif|gif)$/i.test(f.name));
+    if (!files.length) { toast('Keine Bilddateien gefunden'); return; }
+
+    setBusy(true);
+    const fresh = [];
+    const problems = [];
+    let matched = 0;
+    try {
+      for (let n = 0; n < files.length; n++) {
+        const f = files[n];
+        if (server) {
+          if (!serverPhotos.has(f.name)) {
+            updateStatus(`Fotos werden übernommen … ${n + 1} / ${files.length}`);
+            try {
+              const v = await upload(f);
+              serverPhotos.set(f.name, v);
+              images.set(f.name, photoUrl(f.name, v));
+            } catch (err) {
+              problems.push(err.message);
+              continue;
+            }
+          }
+        } else {
+          updateStatus(`Lade Fotos … ${n + 1} / ${files.length}`);
+          let url;
+          try {
+            url = await thumbnail(f);
+          } catch (err) {
+            problems.push(`${f.name} ist nicht lesbar`);
+            continue;
+          }
+          const old = images.get(f.name);
+          if (old && old.startsWith('blob:')) URL.revokeObjectURL(old);
+          images.set(f.name, url);
+        }
+        if (byName(f.name)) matched++;
+        else if (!fresh.includes(f.name)) fresh.push(f.name);
+      }
+    } finally {
+      setBusy(false);
+    }
+
+    fresh.sort(collator.compare);
+    if (fresh.length) {
+      snapshot(plural(fresh.length, 'Foto hinzufügen', 'Fotos hinzufügen'));
+      placeNew(fresh);
+      setSelection(fresh);
+    }
+    drawAll();
+    if (fresh.length) {
+      fitAll();
+      changed(true);
+    }
+
+    const parts = [];
+    if (fresh.length) parts.push(`${fresh.length} neu auf dem Board`);
+    if (matched) parts.push(server ? `${matched} waren schon da` : `${matched} zugeordnet`);
+    let msg = parts.join(', ') || 'Nichts geladen';
+    if (problems.length) msg += ` · ${problems.length} Problem${problems.length > 1 ? 'e' : ''}: ${problems[0]}`;
+    toast(msg, problems.length ? 7000 : 3200);
+  }
+
+  $('btn-photos').addEventListener('click', () => inputPhotos.click());
+  inputPhotos.addEventListener('change', () => {
+    const files = [...inputPhotos.files];
+    inputPhotos.value = '';
+    addFiles(files);
+  });
+
+  // Fotos aus dem Finder auf die Fläche ziehen geht auch
+  let dragDepth = 0;
+  const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  window.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    dropEl.hidden = false;
+  });
+  window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) dropEl.hidden = true;
+  });
+  window.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    dropEl.hidden = true;
+    if (!busy) addFiles(e.dataTransfer.files);
+  });
+
+  // ---------- Board-Daten ----------
+  function parseLayout(data) {
+    if (!data || !Array.isArray(data.items)) throw new Error('Das ist kein Fotoboard-Layout (items fehlt).');
+    const num = (v) => (Number.isFinite(+v) ? +v : 0);
+    const seen = new Set();
+    const list = [];
+    for (const it of data.items) {
+      if (!it || typeof it.name !== 'string' || !it.name || seen.has(it.name)) continue;
+      seen.add(it.name);
+      list.push({ name: it.name, x: num(it.x), y: num(it.y), rot: normRot(num(it.rot)), z: num(it.z) });
+    }
+    const s = +data.size;
+    return { size: Number.isFinite(s) && s > 0 ? s : 300, items: list };
+  }
+
+  function dataFromHtml(text) {
+    const m = text.match(/<script id="fotoboard-data" type="application\/json">([\s\S]*?)<\/script>/)
+      || text.match(/const LAYOUT = (\{[\s\S]*?\});\s*$/m);
+    if (!m) throw new Error('In dieser Datei steckt kein Fotoboard.');
+    return JSON.parse(m[1]);
+  }
+
+  function makeBoard(slug, title, data) {
+    const { size, items } = data ? parseLayout(data) : { size: 300, items: [] };
+    return {
+      slug,
+      title: (title || '').trim() || 'Fotoboard',
+      description: (data && typeof data.description === 'string') ? data.description : '',
+      size,
+      items,
+      dirty: false,
+      rev: 0,
+      html: null,
+    };
+  }
+
+  function sortedItems(b) {
+    const sorted = b.items.slice().sort((x, y) => x.z - y.z);
+    sorted.forEach((it, i) => { it.z = i + 1; });
+    if (b === cur) for (const it of sorted) { const el = els.get(it.name); if (el) el.style.zIndex = it.z; }
+    return sorted.map(({ name, x, y, rot, z }) => ({ name, x: Math.round(x), y: Math.round(y), rot, z }));
+  }
+
+  function boardData(b) {
+    return {
+      version: 2,
+      title: b.title,
+      description: b.description || '',
+      slug: b.slug,
+      size: b.size,
+      items: sortedItems(b),
+      boards: boards.map((x) => ({ slug: x.slug, title: x.title, count: x.items.length })),
+    };
+  }
+
+  function hash(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  // Erzeugt die fertige index.html eines Boards
+  function buildHtml(b) {
+    const data = boardData(b);
+    // "<" escapen, damit ein Dateiname das Script-Tag nicht beenden kann
+    const json = JSON.stringify(data).replace(/</g, '\\u003c');
+    const title = b.title || 'Fotoboard';
+    const description = b.description || plural(b.items.length, 'Foto', 'Fotos');
+    const dir = site ? site + (b.slug ? b.slug + '/' : '') : '';
+    const image = dir + 'vorschau.jpg?v=' + hash(b.size + JSON.stringify(data.items));
+    const meta = [
+      ['property', 'og:type', 'website'],
+      ['property', 'og:title', title],
+      ['property', 'og:description', description],
+      dir ? ['property', 'og:url', dir] : null,
+      ['property', 'og:image', image],
+      ['property', 'og:image:width', '1200'],
+      ['property', 'og:image:height', '630'],
+      ['name', 'twitter:card', 'summary_large_image'],
+    ].filter(Boolean).map(([attr, name, content]) => `<meta ${attr}="${name}" content="${escapeHtml(content)}">`);
+    const values = { title: escapeHtml(title), description: escapeHtml(description), social: meta.join('\n'), data: json };
+    return TEMPLATE.replace(/\{\{(\w+)\}\}/g, (m, key) => (key in values ? values[key] : m));
+  }
+
+  // ---------- Speichern ----------
+  async function api(method, path, body) {
+    const opts = { method, headers: { 'X-Fotoboard': '1' }, cache: 'no-store' };
+    if (body !== undefined) {
+      opts.body = JSON.stringify(body);
+      opts.headers['Content-Type'] = 'application/json';
+    }
+    let res;
+    try {
+      res = await fetch(path, opts);
+    } catch (_) {
+      throw new Error('Der Editor-Server antwortet nicht. Läuft Fotoboard.command noch?');
+    }
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok || !data || data.ok === false) throw new Error((data && data.error) || `Fehler ${res.status}`);
+    return data;
+  }
+
+  function changed(all = false) {
+    for (const b of all ? boards : [cur]) {
+      b.dirty = true;
+      b.rev++;
+    }
+    persistSoon();
+    updateStatus();
+  }
+
+  function setSave(kind, msg = '') {
+    saveState = { kind, msg };
+    updateStatus();
+  }
+
+  let persistTimer = 0, retryTimer = 0, persisting = null, again = false;
+
+  function persistSoon() {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(persist, 500);
+    if (server && saveState.kind === 'ok') setSave('saving');
+  }
+
+  function saveLocal() {
+    try {
+      localStorage.setItem(LS_BOARDS, JSON.stringify({
+        boards: boards.map((b) => ({
+          slug: b.slug, title: b.title, description: b.description, size: b.size,
+          items: sortedItems(b), dirty: !!b.dirty,
+        })),
+        pendingDeletes,
+      }));
+    } catch (err) {
+      toast('Konnte nicht im Browser speichern: ' + err.message);
+    }
+  }
+
+  function persist() {
+    clearTimeout(persistTimer);
+    if (persisting) { again = true; return persisting; }
+    persisting = (async () => {
+      saveLocal();
+      if (!server) return;
+      try {
+        while (pendingDeletes.length) {
+          await api('POST', 'api/delete', { slug: pendingDeletes[0] });
+          pendingDeletes.shift();
+        }
+        for (const b of boards) {
+          if (!b.dirty) continue;
+          const rev = b.rev;
+          const html = buildHtml(b);
+          await api('POST', 'api/save', { slug: b.slug, html });
+          b.html = html;
+          if (b.rev === rev) b.dirty = false;
+        }
+        saveLocal();
+        if (boards.some((b) => b.dirty)) again = true;
+        else setSave('ok');
+      } catch (err) {
+        setSave('error', err.message);
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(persistSoon, 5000);
+      }
+    })().finally(() => {
+      persisting = null;
+      if (again) { again = false; persistSoon(); }
+    });
+    return persisting;
+  }
+
+  // Wartet, bis alles im Ordner ist
+  async function flush() {
+    if (persisting) await persisting;
+    await persist();
+    if (server && (boards.some((b) => b.dirty) || pendingDeletes.length)) {
+      throw new Error(saveState.msg || 'Speichern hat nicht geklappt.');
+    }
+  }
+
+  let uiTimer = 0;
+  function saveUiSoon() {
+    clearTimeout(uiTimer);
+    uiTimer = setTimeout(saveUi, 500);
+  }
+  function saveUi() {
+    clearTimeout(uiTimer);
+    views[cur.slug] = { ...view };
+    try {
+      localStorage.setItem(LS_UI, JSON.stringify({ grid, current: cur.slug, views }));
+    } catch (_) {}
+  }
+
+  window.addEventListener('pagehide', () => {
+    saveLocal();
+    saveUi();
+    if (!server) return;
+    for (const b of boards) {
+      if (!b.dirty) continue;
+      try {
+        fetch('api/save', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'X-Fotoboard': '1', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: b.slug, html: buildHtml(b) }),
+        });
+      } catch (_) {}
+    }
+  });
+
+  function download(name, text, type) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  // ---------- Boards: wechseln, anlegen, bearbeiten, löschen ----------
+  function switchBoard(b) {
+    if (b === cur) return;
+    saveUi();
+    cur = b;
+    selection.clear();
+    undoStack.length = 0;
+    redoStack.length = 0;
+    showGuides(null);
+    drawAll();
+    updateBoardButton();
+    const v = views[b.slug];
+    if (v && [v.x, v.y, v.s].every(Number.isFinite) && v.s > 0 && b.items.length) {
+      Object.assign(view, { x: v.x, y: v.y, s: clamp(v.s, MIN_SCALE, MAX_SCALE) });
+      applyView();
+    } else fitAll();
+    saveUi();
+  }
+
+  function slugify(text) {
+    return text.toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 50).replace(/-+$/, '');
+  }
+
+  function uniqueSlug(base, except) {
+    base = base || 'board';
+    if (RESERVED.includes(base)) base += '-board';
+    let slug = base, n = 2;
+    while (boards.some((b) => b !== except && b.slug === slug)) slug = `${base.slice(0, 46)}-${n++}`;
+    return slug;
+  }
+
+  function urlFor(slug) {
+    return (site || '…/') + (slug ? slug + '/' : '');
+  }
+
+  // Öffnet einen Dialog. submit() gibt das Ergebnis zurück oder undefined, wenn der
+  // Dialog offen bleiben soll. Abbrechen, Esc und Schliessen ergeben null.
+  function openDialog(dlg, submit, focusEl) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        if (dlg.open) dlg.close();
+        resolve(value);
+      };
+      dlg.querySelector('form').onsubmit = (e) => {
+        e.preventDefault();
+        const value = submit();
+        if (value !== undefined) finish(value);
+      };
+      for (const b of dlg.querySelectorAll('[data-close]')) b.onclick = () => finish(null);
+      dlg.oncancel = (e) => { e.preventDefault(); finish(null); };
+      dlg.onclose = () => finish(null);
+      dlg.showModal();
+      if (focusEl) focusEl.focus();
+    });
+  }
+
+  // Dialog zum Anlegen oder Bearbeiten. Gibt {title, description, slug, copy} oder null zurück.
+  function boardDialog(board) {
+    const dlg = $('dlg-board');
+    const fTitle = $('f-title'), fDesc = $('f-desc'), fSlug = $('f-slug'), fUrl = $('f-url'), fErr = $('f-error');
+    const isNew = !board;
+    const isRoot = board && board.slug === '';
+    $('board-dlg-title').textContent = isNew ? 'Neues Board' : 'Board bearbeiten';
+    $('f-ok').textContent = isNew ? 'Anlegen' : 'Speichern';
+    $('f-copy-row').hidden = !isNew;
+    $('f-copy').checked = false;
+    fTitle.value = board ? board.title : '';
+    fDesc.value = board ? board.description : '';
+    fSlug.value = isRoot ? '' : board ? board.slug : '';
+    fSlug.disabled = isRoot;
+    fSlug.placeholder = isRoot ? 'Hauptseite' : '';
+    fErr.textContent = '';
+    let slugTouched = !isNew;
+    const showUrl = () => { fUrl.textContent = urlFor(isRoot ? '' : fSlug.value.trim()); };
+    fTitle.oninput = () => {
+      if (!slugTouched && !isRoot) fSlug.value = uniqueSlug(slugify(fTitle.value), board);
+      showUrl();
+    };
+    fSlug.oninput = () => { slugTouched = true; showUrl(); };
+    showUrl();
+    const result = openDialog(dlg, () => {
+      const title = fTitle.value.trim();
+      const slug = isRoot ? '' : fSlug.value.trim();
+      let err = '';
+      if (!title) err = 'Bitte gib dem Board einen Namen.';
+      else if (!isRoot && !validSlug(slug)) err = RESERVED.includes(slug)
+        ? `«${slug}» ist reserviert, bitte eine andere Adresse wählen.`
+        : 'Die Adresse darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten.';
+      else if (!isRoot && boards.some((b) => b !== board && b.slug === slug)) err = 'Diese Adresse hat schon ein anderes Board.';
+      if (err) {
+        fErr.textContent = err;
+        return undefined;
+      }
+      return { title, description: fDesc.value.trim(), slug, copy: $('f-copy').checked };
+    }, fTitle);
+    fTitle.select();
+    return result;
+  }
+
+  function confirmDialog(title, text, ok) {
+    const dlg = $('dlg-confirm');
+    $('c-title').textContent = title;
+    $('c-text').textContent = text;
+    $('c-ok').textContent = ok;
+    return openDialog(dlg, () => true, $('c-ok')).then((r) => r === true);
+  }
+
+  async function newBoard() {
+    const r = await boardDialog(null);
+    if (!r) return;
+    const b = makeBoard(r.slug, r.title);
+    b.description = r.description;
+    if (r.copy) {
+      b.size = cur.size;
+      b.items = clone(cur.items);
+    }
+    boards.push(b);
+    switchBoard(b);
+    changed(true);
+    toast(`Board «${b.title}» angelegt · Adresse: ${urlFor(b.slug)}`, 5000);
+  }
+
+  async function editBoard() {
+    const b = cur;
+    const r = await boardDialog(b);
+    if (!r) return;
+    if (r.slug !== b.slug && b.slug) {
+      if (!pendingDeletes.includes(b.slug)) pendingDeletes.push(b.slug);
+      pendingDeletes = pendingDeletes.filter((s) => s !== r.slug);
+      views[r.slug] = views[b.slug];
+      b.slug = r.slug;
+    }
+    b.title = r.title;
+    b.description = r.description;
+    updateBoardButton();
+    changed(true);
+    saveUi();
+    toast('Gespeichert');
+  }
+
+  async function deleteBoard() {
+    const b = cur;
+    if (!b.slug) return;
+    const text = server
+      ? `Die Seite ${urlFor(b.slug)} verschwindet aus dem Ordner. Online bleibt sie, bis du das nächste Mal veröffentlichst. Die Fotos selbst bleiben erhalten.`
+      : 'Das Board wird aus diesem Browser entfernt. Die Fotos selbst bleiben erhalten.';
+    if (!await confirmDialog(`Board «${b.title}» löschen?`, text, 'Löschen')) return;
+    boards = boards.filter((x) => x !== b);
+    if (!pendingDeletes.includes(b.slug)) pendingDeletes.push(b.slug);
+    delete views[b.slug];
+    switchBoard(boards[0]);
+    changed(true);
+    toast(`Board «${b.title}» gelöscht`);
+  }
+
+  // ---------- Board-Menü ----------
+  function closeMenu() {
+    if (menuEl.hidden) return;
+    menuEl.hidden = true;
+    btnBoard.setAttribute('aria-expanded', 'false');
+  }
+
+  function openMenu() {
+    menuEl.textContent = '';
+    const add = (label, fn, opts = {}) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', opts.check !== undefined ? 'menuitemradio' : 'menuitem');
+      if (opts.check !== undefined) b.setAttribute('aria-checked', String(opts.check));
+      const check = document.createElement('span');
+      check.className = 'check';
+      check.textContent = opts.check ? '✓' : '';
+      const title = document.createElement('span');
+      title.className = 'title' + (opts.danger ? ' danger' : '');
+      title.textContent = label;
+      b.append(check, title);
+      if (opts.meta) {
+        const meta = document.createElement('span');
+        meta.className = 'meta';
+        meta.textContent = opts.meta;
+        b.append(meta);
+      }
+      b.disabled = !!opts.disabled;
+      b.addEventListener('click', () => { closeMenu(); fn(); });
+      menuEl.append(b);
+      return b;
+    };
+    const hr = () => menuEl.append(document.createElement('hr'));
+    for (const b of boards) {
+      add(b.title, () => switchBoard(b), { check: b === cur, meta: b.slug ? `/${b.slug}/` : 'Hauptseite' });
+    }
+    hr();
+    add('Neues Board …', newBoard);
+    add('Name, Beschreibung, Adresse …', editBoard);
+    add('Dieses Board löschen …', deleteBoard, { danger: true, disabled: !cur.slug });
+    hr();
+    add('Layout-Datei speichern', () => {
+      if (!cur.items.length) { toast('Das Board ist leer'); return; }
+      download(`layout${cur.slug ? '-' + cur.slug : ''}.json`, JSON.stringify(boardData(cur), null, 2) + '\n', 'application/json');
+      toast('Layout-Datei gespeichert (im Download-Ordner)');
+    });
+    add('Layout-Datei oder index.html öffnen …', () => inputOpen.click());
+    const r = btnBoard.getBoundingClientRect();
+    menuEl.style.left = r.left + 'px';
+    menuEl.style.top = (r.bottom + 6) + 'px';
+    menuEl.hidden = false;
+    btnBoard.setAttribute('aria-expanded', 'true');
+    (menuEl.querySelector('[aria-checked="true"]') || menuEl.querySelector('button')).focus();
+  }
+
+  btnBoard.addEventListener('click', () => (menuEl.hidden ? openMenu() : closeMenu()));
+  document.addEventListener('pointerdown', (e) => {
+    if (!menuEl.hidden && !menuEl.contains(e.target) && !btnBoard.contains(e.target)) closeMenu();
+  }, true);
+  menuEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const list = [...menuEl.querySelectorAll('button:not(:disabled)')];
+    const i = list.indexOf(document.activeElement);
+    list[(i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length].focus();
+    e.preventDefault();
+  });
+
+  inputOpen.addEventListener('change', async () => {
+    const file = inputOpen.files[0];
+    inputOpen.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = /\.html?$/i.test(file.name) || /^\s*</.test(text) ? dataFromHtml(text) : JSON.parse(text);
+      const parsed = parseLayout(data);
+      snapshot('Öffnen');
+      cur.size = parsed.size;
+      cur.items = parsed.items;
+      selection.clear();
+      drawAll();
+      fitAll();
+      changed(true);
+      const missing = cur.items.filter((it) => !images.has(it.name)).length;
+      toast(`${file.name} geöffnet: ${cur.items.length} Fotos` + (missing ? `, ${missing} ohne Datei` : '') + ` · ${MOD}+Z macht es rückgängig`, 5000);
+    } catch (err) {
+      toast('Konnte die Datei nicht öffnen: ' + err.message, 6000);
+    }
+  });
+
+  // ---------- index.html erzeugen (ohne fotoboard.py) ----------
+  $('btn-export').addEventListener('click', () => {
+    if (!cur.items.length) { toast('Das Board ist leer'); return; }
+    download('index.html', buildHtml(cur), 'text/html');
+    toast(cur.slug
+      ? `index.html erzeugt: in einen Ordner «${cur.slug}» neben fotos/ legen`
+      : 'index.html erzeugt: neben den Ordner fotos/ legen', 5000);
+  });
+
+  // ---------- Ansehen und Veröffentlichen (mit fotoboard.py) ----------
+  $('btn-view').addEventListener('click', async () => {
+    const win = window.open('', '_blank');
+    try {
+      await flush();
+    } catch (err) {
+      toast(err.message, 6000);
+    }
+    const url = new URL((cur.slug ? cur.slug + '/' : '') + '?t=' + Date.now(), location.href).href;
+    if (win) win.location.href = url;
+    else window.open(url, '_blank');
+  });
+
+  const pubDlg = $('dlg-publish');
+  const pubBody = $('pub-body');
+  const pubGo = $('pub-go');
+  const pubClose = $('pub-close');
+  let publishing = false;
+
+  pubClose.addEventListener('click', () => { if (!publishing) pubDlg.close(); });
+  pubDlg.addEventListener('cancel', (e) => { if (publishing) e.preventDefault(); });
+
+  function pubMessage(html) {
+    pubBody.innerHTML = html;
+  }
+
+  function linkHtml(url) {
+    return url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>` : '';
+  }
+
+  async function publishFlow() {
+    pubGo.hidden = true;
+    pubGo.disabled = false;
+    pubClose.textContent = 'Abbrechen';
+    pubMessage('<p><span class="spinner"></span>Prüfe, was sich geändert hat …</p>');
+    pubDlg.showModal();
+    let plan;
+    try {
+      await flush();
+      plan = await api('GET', 'api/plan');
+    } catch (err) {
+      pubMessage(`<p class="error">${escapeHtml(err.message)}</p>`);
+      pubClose.textContent = 'Schliessen';
+      return;
+    }
+    const rows = plan.boards.map((b) => `<li><b>${escapeHtml(b.title)}</b> · ${plural(b.count, 'Foto', 'Fotos')}
+      <span class="tag ${escapeHtml(b.status)}">${escapeHtml(b.status)}</span><br><span class="url">${linkHtml(b.url)}</span></li>`);
+    for (const s of plan.removed_boards) rows.push(`<li><b>/${escapeHtml(s)}/</b> <span class="tag geändert">wird entfernt</span></li>`);
+    const notes = [];
+    if (plan.new_photos.length) notes.push(`${plural(plan.new_photos.length, 'Foto kommt', 'Fotos kommen')} neu dazu.`);
+    if (plan.new_versions && plan.new_versions.length) notes.push(`Grössere Versionen für ${plural(plan.new_versions.length, 'Foto', 'Fotos')}, damit man in der Grossansicht tiefer zoomen kann.`);
+    if (plan.removed_photos.length) notes.push(`${plural(plan.removed_photos.length, 'Foto ist', 'Fotos sind')} auf keinem Board mehr und ${plan.removed_photos.length === 1 ? 'wird' : 'werden'} entfernt.`);
+    if (plan.tools.length) notes.push(`Ausserdem: ${plan.tools.map(escapeHtml).join(', ')}`);
+    let html = `<p>Diese Boards gehen online:</p><ul>${rows.join('')}</ul>`;
+    if (notes.length) html += `<p>${notes.join(' ')}</p>`;
+    if (plan.missing.length) {
+      html += `<p class="error">Diese Fotos fehlen in originale/: ${plan.missing.map(escapeHtml).join(', ')}. Entferne sie vom Board oder lege die Dateien wieder hin.</p>`;
+    } else if (plan.nothing) {
+      html += '<p>Alles ist schon online, es gibt nichts Neues.</p>';
+    } else {
+      pubGo.hidden = false;
+    }
+    pubClose.textContent = pubGo.hidden ? 'Schliessen' : 'Abbrechen';
+    pubMessage(html);
+    if (!pubGo.hidden) pubGo.focus();
+  }
+
+  pubGo.addEventListener('click', async () => {
+    publishing = true;
+    pubGo.disabled = true;
+    pubClose.disabled = true;
+    setBusy(true);
+    pubMessage('<p><span class="spinner"></span>Wird hochgeladen … das dauert ein paar Sekunden.</p>');
+    try {
+      const r = await api('POST', 'api/publish', {});
+      const links = (r.boards || []).map((b) => `${escapeHtml(b.title)}: ${linkHtml(b.url)}`);
+      pubMessage(r.changed
+        ? `<p><b>Fertig.</b> GitHub braucht jetzt etwa eine Minute, dann ist alles online.</p><p>${links.join('<br>')}</p>`
+        : '<p>Alles ist schon online, es gab nichts Neues.</p>');
+      toast('Veröffentlicht');
+    } catch (err) {
+      pubMessage(`<p class="error">Veröffentlichen hat nicht geklappt:</p><pre>${escapeHtml(err.message)}</pre>`);
+    } finally {
+      publishing = false;
+      setBusy(false);
+      pubGo.hidden = true;
+      pubClose.disabled = false;
+      pubClose.textContent = 'Schliessen';
+      pubClose.focus();
+    }
+  });
+
+  $('btn-publish').addEventListener('click', publishFlow);
+
+  // ---------- übrige Knöpfe ----------
+  $('btn-fit').addEventListener('click', fitAll);
+  $('btn-snap').addEventListener('click', snapAll);
+  btnGrid.addEventListener('click', toggleGrid);
+  // Nach Mausklick den Fokus abgeben, damit Leertaste/Enter den Knopf nicht erneut auslösen
+  toolbar.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b && e.detail > 0 && b !== btnBoard) b.blur();
+  });
+
+  window.addEventListener('resize', () => updateStatus());
+
+  // ---------- Start ----------
+  function loadLocal() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_BOARDS) || 'null');
+      if (raw && Array.isArray(raw.boards)) {
+        pendingDeletes = Array.isArray(raw.pendingDeletes) ? raw.pendingDeletes.filter((s) => s && validSlug(s)) : [];
+        const seen = new Set();
+        const list = [];
+        for (const b of raw.boards) {
+          if (!b || !validSlug(b.slug) || seen.has(b.slug)) continue;
+          seen.add(b.slug);
+          try {
+            const board = makeBoard(b.slug, b.title, b);
+            board.dirty = !!b.dirty;
+            list.push(board);
+          } catch (_) {}
+        }
+        return list;
+      }
+      const old = localStorage.getItem(LS_OLD);
+      if (old) return [makeBoard('', 'Fotoboard', JSON.parse(old))];
+    } catch (_) {}
+    return [];
+  }
+
+  function loadUi() {
+    try {
+      const ui = JSON.parse(localStorage.getItem(LS_UI) || 'null') || {};
+      if (ui.view && !ui.views) ui.views = { '': ui.view };   // früheres Format
+      return ui;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  async function connect() {
+    if (!/^https?:$/.test(location.protocol)) return null;
+    try {
+      return await api('GET', 'api/info');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Boards aus dem Ordner sind massgebend. Nur was hier noch nicht gespeichert
+  // werden konnte (dirty), kommt aus dem Browser.
+  function mergeBoards(local, disk) {
+    const root = disk.find((d) => d.slug === '');
+    const order = root && Array.isArray(root.data.boards) ? root.data.boards.map((b) => b.slug) : [];
+    const list = [];
+    for (const d of disk) {
+      if (pendingDeletes.includes(d.slug)) continue;
+      try {
+        const b = makeBoard(d.slug, d.data.title || (d.slug || 'Fotoboard'), d.data);
+        b.html = d.html;
+        list.push(b);
+      } catch (_) {}
+    }
+    for (const lb of local) {
+      if (!lb.dirty) continue;
+      const i = list.findIndex((b) => b.slug === lb.slug);
+      if (i >= 0) { lb.html = list[i].html; list[i] = lb; } else list.push(lb);
+    }
+    const rank = (b) => (b.slug === '' ? -1 : order.includes(b.slug) ? order.indexOf(b.slug) : 1e6);
+    list.sort((a, b) => rank(a) - rank(b) || collator.compare(a.title, b.title));
+    return list;
+  }
+
+  async function start() {
+    updateStatus('Lade …');
+    const local = loadLocal();
+    const ui = loadUi();
+    const info = await connect();
+    if (info) {
+      server = info;
+      document.body.classList.add('mode-server');
+      site = info.site || '';
+      try { localStorage.setItem(LS_SITE, site); } catch (_) {}
+      for (const p of info.photos || []) {
+        serverPhotos.set(p.name, p.v);
+        images.set(p.name, photoUrl(p.name, p.v));
+      }
+      boards = mergeBoards(local, info.boards || []);
+    } else {
+      document.body.classList.add('mode-file');
+      try { site = localStorage.getItem(LS_SITE) || ''; } catch (_) {}
+      boards = local;
+      for (const b of boards) b.dirty = false;
+    }
+    if (!boards.some((b) => b.slug === '')) boards.unshift(makeBoard('', 'Fotoboard'));
+
+    grid = ui.grid !== false;
+    views = ui.views && typeof ui.views === 'object' ? ui.views : {};
+    cur = boards.find((b) => b.slug === ui.current) || boards[0];
+
+    // Seiten, die mit einer älteren Vorlage erzeugt wurden, neu schreiben
+    if (server) {
+      let upgraded = 0;
+      for (const b of boards) {
+        if (b.html !== buildHtml(b)) { b.dirty = true; upgraded++; }
+      }
+      if (upgraded || pendingDeletes.length) persistSoon();
+    }
+
+    stage.classList.toggle('grid', grid);
+    btnGrid.setAttribute('aria-pressed', String(grid));
+    updateBoardButton();
+    drawAll();
+    const v = views[cur.slug];
+    if (v && [v.x, v.y, v.s].every(Number.isFinite) && v.s > 0 && cur.items.length) {
+      Object.assign(view, { x: v.x, y: v.y, s: clamp(v.s, MIN_SCALE, MAX_SCALE) });
+      applyView();
+    } else fitAll();
+
+    if (!server && cur.items.length) {
+      toast(`Layout wiederhergestellt: ${cur.items.length} Fotos. Mit «Fotos laden» die Bilder dazu wählen. Tipp: Mit Fotoboard.command speichert der Editor direkt in den Ordner.`, 7000);
+    }
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

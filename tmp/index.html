@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
+<title>Tmp</title>
+<meta name="description" content="16 Fotos">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tmp">
+<meta property="og:description" content="16 Fotos">
+<meta property="og:url" content="https://ibfait.github.io/fotoboard/tmp/">
+<meta property="og:image" content="https://ibfait.github.io/fotoboard/tmp/vorschau.jpg?v=1w7q71q">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  body {
+    color: #eee;
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  #stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+  }
+  #stage.dragging, #stage.dragging .photo { cursor: grabbing; }
+  #world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  #world.ready { opacity: 1; }
+  .photo {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--size);
+    height: var(--size);
+    background: #111;
+    cursor: zoom-in;
+  }
+  .photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  .photo.missing img { visibility: hidden; }
+
+  #nav {
+    position: fixed;
+    left: max(12px, env(safe-area-inset-left));
+    top: max(12px, env(safe-area-inset-top));
+    z-index: 5;
+    font-size: 14px;
+  }
+  #nav[hidden], #nav-list[hidden] { display: none; }
+  #nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 24px);
+    padding: 8px 12px 8px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(28, 28, 28, 0.78);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: #eee;
+    font: inherit;
+    cursor: pointer;
+  }
+  #nav-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #nav-btn svg { flex: none; width: 16px; height: 16px; transition: transform 0.2s ease; }
+  #nav-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+  #nav-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  #nav-list {
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(70vh, 560px);
+    margin-top: 8px;
+    padding: 6px;
+    overflow-y: auto;
+    border-radius: 14px;
+    background: rgba(22, 22, 22, 0.92);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+  #nav-list a {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 6px;
+    border-radius: 10px;
+    color: #eee;
+    text-decoration: none;
+  }
+  #nav-list a:hover, #nav-list a:focus-visible { background: rgba(255, 255, 255, 0.08); outline: none; }
+  #nav-list a[aria-current="page"] { background: rgba(255, 255, 255, 0.13); }
+  #nav-list img {
+    display: block;
+    width: 96px;
+    aspect-ratio: 1200 / 630;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111;
+  }
+  #nav-list b { display: block; font-weight: 600; }
+  #nav-list small { color: #9a9a9a; font-size: 12px; }
+
+  .pswp { --pswp-bg: #000; }
+  .pswp__img { -webkit-user-drag: none; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="world"></div></div>
+
+<nav id="nav" aria-label="Boards" hidden>
+  <button id="nav-btn" type="button" aria-expanded="false" aria-controls="nav-list">
+    <span id="nav-title"></span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+  </button>
+  <div id="nav-list" hidden></div>
+</nav>
+
+<script id="fotoboard-data" type="application/json">{"version":2,"title":"Tmp","description":"","slug":"tmp","size":300,"items":[{"name":"WhatsApp Image 2026-10-29 at 14.53.52.jpeg","x":0,"y":320,"rot":0,"z":1},{"name":"WhatsApp Image 2026-10-29 at 14.53.50.jpeg","x":0,"y":0,"rot":0,"z":2},{"name":"WhatsApp Image 2026-10-29 at 14.53.51 (1).jpeg","x":960,"y":0,"rot":0,"z":3},{"name":"WhatsApp Image 2026-10-29 at 14.53.51.jpeg","x":640,"y":0,"rot":0,"z":4},{"name":"WhatsApp Image 2026-10-29 at 14.53.53 (3).jpeg","x":320,"y":0,"rot":0,"z":5},{"name":"WhatsApp Image 2026-10-29 at 14.53.52 (1).jpeg","x":320,"y":320,"rot":0,"z":6},{"name":"WhatsApp Image 2026-10-29 at 14.53.54 (1).jpeg","x":1280,"y":0,"rot":0,"z":7},{"name":"WhatsApp Image 2026-10-29 at 14.53.54 (3).jpeg","x":640,"y":320,"rot":0,"z":8},{"name":"WhatsApp Image 2026-10-29 at 14.53.54.jpeg","x":1600,"y":0,"rot":0,"z":9},{"name":"WhatsApp Image 2026-10-29 at 14.53.55 (1).jpeg","x":960,"y":320,"rot":0,"z":10},{"name":"WhatsApp Image 2026-10-29 at 14.53.55.jpeg","x":1280,"y":320,"rot":0,"z":11},{"name":"WhatsApp Image 2026-10-29 at 14.53.56 (1).jpeg","x":1600,"y":320,"rot":0,"z":12},{"name":"WhatsApp Image 2026-10-29 at 14.53.56.jpeg","x":0,"y":640,"rot":0,"z":13},{"name":"WhatsApp Image 2026-10-29 at 14.53.54 (2).jpeg","x":320,"y":640,"rot":0,"z":14},{"name":"WhatsApp Image 2026-10-29 at 14.53.55 (3).jpeg","x":640,"y":640,"rot":0,"z":15},{"name":"WhatsApp Image 2026-10-29 at 14.53.55 (2).jpeg","x":960,"y":640,"rot":0,"z":16}],"boards":[{"slug":"","title":"Fotoboard","count":40},{"slug":"test","title":"Test","count":2},{"slug":"tmp","title":"Tmp","count":16}]}</script>
+<script>
+(() => {
+  'use strict';
+  const DATA = JSON.parse(document.getElementById('fotoboard-data').textContent);
+
+  const S = DATA.size || 300;
+  const SLUG = DATA.slug || '';
+  const BASE = SLUG ? '../' : '';
+  const items = DATA.items.slice().sort((a, b) => a.z - b.z);
+  const TAP = 8;            // ab so vielen Pixeln gilt ein Druck als Ziehen
+  const MAX_SCALE = 4;
+  // Versionen der Fotos: beim Hineinzoomen wird die nächstgrössere geladen
+  const LEVELS = [['board', 500], ['mittel', 1000], ['gross', 2000]];
+
+  const stage = document.getElementById('stage');
+  const world = document.getElementById('world');
+  const src = (dir, name) => BASE + 'fotos/' + dir + '/' + encodeURIComponent(name);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  world.style.setProperty('--size', S + 'px');
+
+  const tiles = items.map((it, i) => {
+    const tile = document.createElement('div');
+    tile.className = 'photo';
+    tile.dataset.i = i;
+    tile.style.transform = 'translate(' + it.x + 'px, ' + it.y + 'px) rotate(' + (it.rot || 0) + 'deg)';
+    tile.style.zIndex = i + 1;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    img.decoding = 'async';
+    img.addEventListener('error', () => tile.classList.add('missing'), { once: true });
+    img.src = src('board', it.name);
+    tile.append(img);
+    world.append(tile);
+    return tile;
+  });
+
+  // Umriss jedes Fotos und des ganzen Boards, gedrehte Fotos mitgerechnet
+  const boxes = items.map((it) => {
+    const r = (it.rot || 0) * Math.PI / 180;
+    const h = S / 2 * (Math.abs(Math.cos(r)) + Math.abs(Math.sin(r)));
+    const cx = it.x + S / 2, cy = it.y + S / 2;
+    return { l: cx - h, t: cy - h, r: cx + h, b: cy + h };
+  });
+  const box = boxes.length ? {
+    minX: Math.min(...boxes.map((b) => b.l)),
+    minY: Math.min(...boxes.map((b) => b.t)),
+    maxX: Math.max(...boxes.map((b) => b.r)),
+    maxY: Math.max(...boxes.map((b) => b.b)),
+  } : { minX: 0, minY: 0, maxX: S, maxY: S };
+
+  // ---------- Ansicht: verschieben und zoomen ----------
+  const view = { x: 0, y: 0, s: 1 };
+  let minScale = 0.05;
+  let touched = false;
+
+  function apply() {
+    world.style.transform = 'translate(' + view.x + 'px, ' + view.y + 'px) scale(' + view.s + ')';
+    scheduleSharp();
+  }
+
+  // Die Bildschirmmitte bleibt immer über dem Board, so geht es nie verloren.
+  function keepInside() {
+    const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2;
+    view.x = clamp(view.x, cx - box.maxX * view.s, cx - box.minX * view.s);
+    view.y = clamp(view.y, cy - box.maxY * view.s, cy - box.minY * view.s);
+  }
+
+  function fit() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const pad = Math.round(Math.min(w, h) * 0.04) + 12;
+    const bw = box.maxX - box.minX, bh = box.maxY - box.minY;
+    const s = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh, 2);
+    minScale = Math.min(s * 0.5, 1);
+    view.s = s;
+    view.x = (w - bw * s) / 2 - box.minX * s;
+    view.y = (h - bh * s) / 2 - box.minY * s;
+    apply();
+  }
+
+  function zoomAt(cx, cy, s) {
+    s = clamp(s, minScale, MAX_SCALE);
+    const k = s / view.s;
+    view.x = cx - (cx - view.x) * k;
+    view.y = cy - (cy - view.y) * k;
+    view.s = s;
+    keepInside();
+    apply();
+  }
+
+  // ---------- Scharf beim Hineinzoomen ----------
+  const sharp = items.map(() => ({ level: 0, want: 0, broken: {} }));
+  let sharpTimer = 0;
+
+  function scheduleSharp() {
+    clearTimeout(sharpTimer);
+    sharpTimer = setTimeout(updateSharp, 160);
+  }
+
+  function updateSharp() {
+    const px = S * view.s * (window.devicePixelRatio || 1);
+    const need = px > LEVELS[1][1] * 1.15 ? 2 : px > LEVELS[0][1] * 1.15 ? 1 : 0;
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const wx = (sx) => (sx - view.x) / view.s, wy = (sy) => (sy - view.y) / view.s;
+    // nah: wird scharf geladen; weit weg: zurück auf die kleine Version
+    const near = { l: wx(-w * 0.25), r: wx(w * 1.25), t: wy(-h * 0.25), b: wy(h * 1.25) };
+    const far = { l: wx(-w), r: wx(2 * w), t: wy(-h), b: wy(2 * h) };
+    const hits = (b, a) => b.r > a.l && b.l < a.r && b.b > a.t && b.t < a.b;
+    boxes.forEach((b, i) => {
+      if (tiles[i].classList.contains('missing')) return;
+      let level = sharp[i].want;
+      if (hits(b, near)) level = need;
+      else if (!hits(b, far)) level = 0;
+      else level = Math.min(level, need);
+      setLevel(i, level);
+    });
+  }
+
+  function setLevel(i, level) {
+    const st = sharp[i];
+    while (level > 0 && st.broken[level]) level--;   // fehlt eine Version, die kleinere nehmen
+    if (level === st.want) return;
+    st.want = level;
+    const img = tiles[i].firstChild;
+    const url = src(LEVELS[level][0], items[i].name);
+    if (level === 0) { img.src = url; st.level = 0; return; }
+    const pre = new Image();
+    pre.decoding = 'async';
+    pre.src = url;
+    const loaded = pre.decode ? pre.decode() : new Promise((ok, fail) => { pre.onload = ok; pre.onerror = fail; });
+    loaded.then(() => {
+      if (st.want === level) { img.src = url; st.level = level; }
+    }, () => {
+      st.broken[level] = true;
+      if (st.want === level) { st.want = -1; setLevel(i, level - 1); }
+    });
+  }
+
+  // ---------- Ziehen, Pinch, Mausrad ----------
+  const pts = new Map();
+  let g = null;
+
+  function startPinch() {
+    const [a, b] = [...pts.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    g = {
+      type: 'pinch',
+      d0: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+      s0: view.s,
+      wx: (mx - view.x) / view.s,
+      wy: (my - view.y) / view.s,
+    };
+  }
+
+  function startPan(id, x, y, moved, photo) {
+    g = { type: 'pan', id, sx: x, sy: y, vx: view.x, vy: view.y, moved, photo };
+  }
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    touched = true;
+    try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) {
+      const tile = e.target.closest('.photo');
+      startPan(e.pointerId, e.clientX, e.clientY, false, tile ? +tile.dataset.i : -1);
+    } else if (pts.size === 2) {
+      startPinch();
+    }
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p || !g) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+    if (g.type === 'pan' && e.pointerId === g.id) {
+      const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+      if (!g.moved && Math.hypot(dx, dy) < TAP) return;
+      if (!g.moved) { g.moved = true; stage.classList.add('dragging'); }
+      view.x = g.vx + dx;
+      view.y = g.vy + dy;
+      keepInside();
+      apply();
+    } else if (g.type === 'pinch' && pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const s = clamp(g.s0 * Math.hypot(b.x - a.x, b.y - a.y) / g.d0, minScale, MAX_SCALE);
+      view.s = s;
+      view.x = mx - g.wx * s;
+      view.y = my - g.wy * s;
+      keepInside();
+      apply();
+    }
+  });
+
+  function pointerEnd(e) {
+    if (!pts.delete(e.pointerId) || !g) return;
+    if (g.type === 'pan' && g.id === e.pointerId) {
+      if (!g.moved && e.type === 'pointerup' && g.photo >= 0) openLightbox(g.photo);
+      stage.classList.remove('dragging');
+      g = null;
+    } else if (g.type === 'pinch') {
+      if (pts.size >= 2) startPinch();
+      else if (pts.size === 1) {
+        const [[id, p]] = pts;
+        startPan(id, p.x, p.y, true, -1);
+      } else g = null;
+    }
+  }
+  stage.addEventListener('pointerup', pointerEnd);
+  stage.addEventListener('pointercancel', pointerEnd);
+
+  // Mausrad und Trackpad. Pinch auf dem Trackpad kommt als Rad mit ctrlKey.
+  let gestureScale = null;
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.ctrlKey && gestureScale !== null) return;
+    touched = true;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? stage.clientHeight : 1;
+    const k = e.ctrlKey ? 0.01 : 0.002;
+    zoomAt(e.clientX, e.clientY, view.s * Math.exp(-e.deltaY * unit * k));
+  }, { passive: false });
+
+  // Seitenzoom überall verhindern (Strg+Rad, Safari-Gesten)
+  window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+  document.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+    gestureScale = pts.size < 2 && !pswp && !opening ? view.s : null;
+  });
+  document.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    if (gestureScale === null || pts.size >= 2) return;
+    touched = true;
+    const x = e.clientX ?? stage.clientWidth / 2, y = e.clientY ?? stage.clientHeight / 2;
+    zoomAt(x, y, gestureScale * e.scale);
+  });
+  document.addEventListener('gestureend', (e) => { e.preventDefault(); gestureScale = null; });
+
+  window.addEventListener('resize', () => {
+    if (touched) { keepInside(); apply(); } else fit();
+  });
+
+  // ---------- Andere Boards ----------
+  const nav = document.getElementById('nav');
+  const navBtn = document.getElementById('nav-btn');
+  const navList = document.getElementById('nav-list');
+  const boards = Array.isArray(DATA.boards) ? DATA.boards : [];
+
+  function link(slug, file) {
+    const dir = BASE + (slug ? encodeURIComponent(slug) + '/' : '');
+    return (dir || './') + (file || '');
+  }
+
+  function toggleNav(open) {
+    open = open ?? navList.hidden;
+    navList.hidden = !open;
+    navBtn.setAttribute('aria-expanded', String(open));
+  }
+
+  if (boards.length > 1) {
+    nav.hidden = false;
+    document.getElementById('nav-title').textContent = DATA.title || 'Fotoboard';
+    for (const b of boards) {
+      const a = document.createElement('a');
+      a.href = link(b.slug);
+      if ((b.slug || '') === SLUG) a.setAttribute('aria-current', 'page');
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.addEventListener('error', () => { img.style.visibility = 'hidden'; }, { once: true });
+      img.src = link(b.slug, 'vorschau.jpg');
+      const text = document.createElement('span');
+      const title = document.createElement('b');
+      title.textContent = b.title || 'Fotoboard';
+      const count = document.createElement('small');
+      count.textContent = b.count === 1 ? '1 Foto' : (b.count || 0) + ' Fotos';
+      text.append(title, count);
+      a.append(img, text);
+      navList.append(a);
+    }
+    navBtn.addEventListener('click', () => toggleNav());
+    document.addEventListener('pointerdown', (e) => {
+      if (!navList.hidden && !nav.contains(e.target)) toggleNav(false);
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !navList.hidden) { toggleNav(false); navBtn.focus(); }
+    });
+  }
+
+  // ---------- Grossansicht (PhotoSwipe) ----------
+  // Zeigt sofort das Foto vom Board und lädt im Hintergrund schärfere Versionen.
+  // Beim Hineinzoomen wählt der Browser über srcset die nächstgrössere.
+  const BIG = [['mittel', 1000], ['gross', 2000]];   // dazu «voll» in Originalgrösse
+  const NOMINAL = 4000;     // angenommene Grösse, falls ein Board keine Masse kennt
+  const SIZES = DATA.sizes || {};
+
+  // Reihenfolge zum Blättern: zeilenweise von links oben nach rechts unten
+  const order = (() => {
+    const centers = items.map((it, i) => ({ i, x: it.x + S / 2, y: it.y + S / 2 })).sort((a, b) => a.y - b.y);
+    const rows = [];
+    for (const p of centers) {
+      const row = rows[rows.length - 1];
+      if (row && Math.abs(p.y - row.y) < S / 2) row.list.push(p);
+      else rows.push({ y: p.y, list: [p] });
+    }
+    return rows.flatMap((r) => r.list.sort((a, b) => a.x - b.x).map((p) => p.i));
+  })();
+
+  let pswp = null;
+  let opening = false;
+  let pswpReady = null;
+
+  function loadPhotoSwipe() {
+    if (!pswpReady) {
+      if (!document.getElementById('pswp-css')) {
+        const css = document.createElement('link');
+        css.id = 'pswp-css';
+        css.rel = 'stylesheet';
+        css.href = BASE + 'lib/photoswipe/photoswipe.css';
+        document.head.append(css);
+      }
+      pswpReady = new Promise((resolve, reject) => {
+        const js = document.createElement('script');
+        js.src = BASE + 'lib/photoswipe/photoswipe.umd.min.js';
+        js.onload = () => (window.PhotoSwipe ? resolve(window.PhotoSwipe) : reject(new Error('PhotoSwipe fehlt')));
+        js.onerror = () => { js.remove(); pswpReady = null; reject(new Error('PhotoSwipe nicht geladen')); };
+        document.head.append(js);
+      });
+    }
+    return pswpReady;
+  }
+
+  function slide(i) {
+    const name = items[i].name;
+    const thumb = tiles[i].firstChild;
+    const known = Array.isArray(SIZES[name]) && SIZES[name][0] > 0 && SIZES[name][1] > 0;
+    let w, h;
+    if (known) {
+      [w, h] = SIZES[name];
+    } else {
+      const ar = thumb.naturalWidth && thumb.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 1;
+      w = ar >= 1 ? NOMINAL : Math.round(NOMINAL * ar);
+      h = ar >= 1 ? Math.round(NOMINAL / ar) : NOMINAL;
+    }
+    // Nur Stufen, die kleiner als das Original sind, dazu das Original selbst
+    const long = Math.max(w, h);
+    const set = BIG.filter(([, px]) => px < long)
+      .map(([dir, px]) => src(dir, name) + ' ' + Math.round(w * px / long) + 'w');
+    set.push(src('voll', name) + ' ' + w + 'w');
+    return {
+      src: src(long > 2000 ? 'gross' : 'voll', name),
+      srcset: set.join(', '),
+      msrc: thumb.currentSrc || thumb.getAttribute('src') || src('board', name),
+      width: w,
+      height: h,
+      alt: 'Foto',
+    };
+  }
+
+  async function openLightbox(i) {
+    const start = order.indexOf(i);
+    if (start < 0 || pswp || opening) return;
+    toggleNav(false);
+    opening = true;
+    let PS;
+    try {
+      PS = await loadPhotoSwipe();
+    } catch (_) {
+      return;
+    } finally {
+      opening = false;
+    }
+    pswp = new PS({
+      dataSource: order.map(slide),
+      index: start,
+      bgOpacity: 0.94,
+      showHideAnimationType: 'fade',
+      wheelToZoom: true,
+      // bis doppelte Originalgrösse, mindestens sechsmal grösser als am Anfang
+      maxZoomLevel: (zl) => Math.max(2, zl.fit * 6),
+      closeTitle: 'Schliessen',
+      zoomTitle: 'Zoomen',
+      arrowPrevTitle: 'Vorheriges Foto',
+      arrowNextTitle: 'Nächstes Foto',
+      errorMsg: 'Das Foto lässt sich nicht laden.',
+    });
+    pswp.on('destroy', () => { pswp = null; });
+    pswp.init();
+  }
+
+  // Safari auf dem Mac meldet das Zoomen mit dem Trackpad als «Geste» statt
+  // als Mausrad. Dann zoomen wir in der Grossansicht selbst.
+  let ctrlWheel = false;
+  let pswpGesture = null;
+  window.addEventListener('wheel', (e) => { if (e.ctrlKey) ctrlWheel = true; }, { capture: true, passive: true });
+  document.addEventListener('gesturestart', () => {
+    const s = pswp && pswp.currSlide;
+    pswpGesture = s && !ctrlWheel && !navigator.maxTouchPoints ? s.currZoomLevel : null;
+  });
+  document.addEventListener('gesturechange', (e) => {
+    if (pswpGesture === null || !pswp || !pswp.currSlide || ctrlWheel) return;
+    pswp.currSlide.zoomTo(pswpGesture * e.scale, { x: e.clientX, y: e.clientY }, 0);
+  });
+  document.addEventListener('gestureend', () => { pswpGesture = null; });
+
+  fit();
+  requestAnimationFrame(() => world.classList.add('ready'));
+  setTimeout(() => loadPhotoSwipe().catch(() => {}), 800);
+})();
+</script>
+</body>
+</html>
